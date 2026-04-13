@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export default function ActionRegisterPermanentFix() {
+export default function ActionRegisterFinalMobile() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   const [rows, setRows] = useState(() => {
-    const saved = localStorage.getItem('site_v18_permanent');
+    const saved = localStorage.getItem('site_v20_mobile');
+    // Default date set to 13-04-2026 as per your request
     return saved ? JSON.parse(saved) : [{ 
       id: 1, date: '2026-04-13', desc: '', loggedBy: '', 
       status: 'Open', closedDate: '', before: [], after: [], 
@@ -18,9 +19,10 @@ export default function ActionRegisterPermanentFix() {
   const UPLOAD_PRESET = "ml_default"; 
 
   useEffect(() => {
-    localStorage.setItem('site_v18_permanent', JSON.stringify(rows));
+    localStorage.setItem('site_v20_mobile', JSON.stringify(rows));
   }, [rows]);
 
+  // Converts 2026-04-13 to 13-04-2026 for PDF
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
     const [year, month, day] = dateStr.split("-");
@@ -60,9 +62,9 @@ export default function ActionRegisterPermanentFix() {
   };
 
   const clearAll = () => {
-    if (window.confirm("Delete all data?")) {
+    if (window.confirm("Kandippa ella data-vum clear pannanuma?")) {
       setRows([{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
-      localStorage.removeItem('site_v18_permanent');
+      localStorage.removeItem('site_v20_mobile');
     }
   };
 
@@ -75,8 +77,8 @@ export default function ActionRegisterPermanentFix() {
       theme: 'grid',
       styles: { fontSize: 13, fontStyle: 'bold', halign: 'left', cellPadding: 4, fillColor: [211, 211, 211], lineWidth: 0.5, lineColor: [0, 0, 0] },
       columnStyles: { 
-        0: { cellWidth: 105 }, // Left Alignment Fixed
-        1: { cellWidth: 172, halign: 'left' } // Right Alignment Fixed
+        0: { cellWidth: 105 }, // Left Side Alignment Fixed
+        1: { cellWidth: 172, halign: 'left' } // Right Side Alignment Fixed
       }
     });
 
@@ -95,7 +97,7 @@ export default function ActionRegisterPermanentFix() {
       headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255], fontStyle: 'bold' },
       columnStyles: { 
         2: { cellWidth: 30, halign: 'left' },
-        5: { cellWidth: 15 }, // Actual Closed Date size reduced
+        5: { cellWidth: 15 }, // Closed Date Size Reduced
         6: { cellWidth: 22 }, 7: { cellWidth: 22 }, 8: { cellWidth: 22 }, 9: { cellWidth: 22 },
         12: { cellWidth: 22 } 
       },
@@ -103,7 +105,7 @@ export default function ActionRegisterPermanentFix() {
         if (data.section === 'head') return;
         const rowData = rows[data.row.index];
 
-        // Status & Remarks Color
+        // Color Coding (Red/Green/Yellow)
         if (data.column.index === 4) {
           if (rowData.status.toUpperCase() === 'OPEN') data.cell.styles.fillColor = [255, 0, 0];
           if (rowData.status.toUpperCase() === 'DONE') data.cell.styles.fillColor = [146, 208, 80];
@@ -113,7 +115,6 @@ export default function ActionRegisterPermanentFix() {
           if (rowData.remarks.toUpperCase().includes('NOT IN BOND')) data.cell.styles.fillColor = [255, 204, 0];
         }
 
-        // Photo Mapping
         const drawImg = (url, cell) => { if (url) doc.addImage(url, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2); };
         if (data.column.index === 6) drawImg(rowData.before[0], data.cell);
         if (data.column.index === 7) drawImg(rowData.before[1], data.cell);
@@ -122,7 +123,7 @@ export default function ActionRegisterPermanentFix() {
       }
     });
 
-    doc.save(`${project}.pdf`);
+    doc.save(`${project}_Final_Report.pdf`);
   };
 
   return (
@@ -144,7 +145,7 @@ export default function ActionRegisterPermanentFix() {
                 <div style={ui.thumbList}>
                   {row.before.map((url, i) => (
                     <div key={i} style={ui.thumbWrap}>
-                      <img src={url} style={ui.thumb} />
+                      <img src={url} style={ui.thumb} alt="before" />
                       <button onClick={() => removePhoto(row.id, 'before', i)} style={ui.delBtn}>×</button>
                     </div>
                   ))}
@@ -155,7 +156,7 @@ export default function ActionRegisterPermanentFix() {
                 <div style={ui.thumbList}>
                   {row.after.map((url, i) => (
                     <div key={i} style={ui.thumbWrap}>
-                      <img src={url} style={ui.thumb} />
+                      <img src={url} style={ui.thumb} alt="after" />
                       <button onClick={() => removePhoto(row.id, 'after', i)} style={ui.delBtn}>×</button>
                     </div>
                   ))}
@@ -168,8 +169,8 @@ export default function ActionRegisterPermanentFix() {
       </div>
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>{isUploading ? '...' : 'PDF'}</button>
-        <button onClick={clearAll} style={ui.btnRed}>RESET</button>
+        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>{isUploading ? 'SYNCING...' : 'GET PDF'}</button>
+        <button onClick={clearAll} style={ui.btnRed}>CLEAR ALL</button>
       </div>
     </div>
   );
@@ -178,7 +179,7 @@ export default function ActionRegisterPermanentFix() {
 const ui = {
   container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '110px', fontFamily: 'Arial' },
   nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10 },
-  headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
+  headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
   main: { padding: '12px' },
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' },
@@ -187,9 +188,9 @@ const ui = {
   photoGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', margin: '12px 0' },
   upBtn: { background: '#f8f9fa', padding: '10px', display: 'block', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '12px', cursor: 'pointer' },
   thumbList: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' },
-  thumbWrap: { position: 'relative', width: '40px', height: '40px' },
+  thumbWrap: { position: 'relative', width: '45px', height: '45px' },
   thumb: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
-  delBtn: { position: 'absolute', top: -5, right: -5, background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '15px', height: '15px', fontSize: '10px', cursor: 'pointer' },
+  delBtn: { position: 'absolute', top: -5, right: -5, background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
   footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '10px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box' },
   btnGreen: { flex: 1, padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
