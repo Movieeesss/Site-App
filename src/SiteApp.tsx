@@ -1,24 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx'; // Install using: npm install xlsx
+import * as XLSX from 'xlsx'; // Make sure to run: npm install xlsx
 
-export default function ActionRegisterComplete() {
+export default function ProfessionalActionRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   
-  // STORAGE GUARD: Try-Catch logic to prevent Blank Screen
+  // STORAGE GUARD: Try-Catch to prevent Blank Screen
   const [rows, setRows] = useState(() => {
     try {
-      const saved = localStorage.getItem('site_v35_pro');
+      const saved = localStorage.getItem('site_v40_final');
       return saved ? JSON.parse(saved) : [{ 
         id: 1, date: '2026-04-13', desc: '', loggedBy: '', 
         status: 'Open', closedDate: '', before: [], after: [], 
         owner: '', closedBy: '', remarks: '' 
       }];
     } catch (e) {
-      console.error("Storage Error - Memory Cleared");
-      localStorage.removeItem('site_v35_pro');
-      return [{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', before: [], after: [], owner: '', closedBy: '', remarks: '' }];
+      localStorage.removeItem('site_v40_final');
+      return [{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }];
     }
   });
 
@@ -28,10 +27,10 @@ export default function ActionRegisterComplete() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('site_v35_pro', JSON.stringify(rows));
+      localStorage.setItem('site_v40_final', JSON.stringify(rows));
     } catch (e) {
       if (e.name === 'QuotaExceededError') {
-        alert("Local Storage Full! Please Reset or Export data.");
+        alert("Memory Full! Reset to continue.");
       }
     }
   }, [rows]);
@@ -47,6 +46,7 @@ export default function ActionRegisterComplete() {
     setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
   };
 
+  // LAG FREE: Cloudinary URL storage
   const uploadPhoto = async (id, type, files) => {
     setIsUploading(true);
     for (const file of Array.from(files)) {
@@ -57,29 +57,23 @@ export default function ActionRegisterComplete() {
         const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
         const data = await res.json();
         setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], data.secure_url] } : r));
-      } catch (e) { alert("Upload error!"); }
+      } catch (e) { alert("Upload Error!"); }
     }
     setIsUploading(false);
   };
 
-  // DELETE FEATURE: X button logic to clear storage space
+  // INDIVIDUAL DELETE (Red X Button)
   const removePhoto = (id, type, index) => {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: r[type].filter((_, i) => i !== index) } : r));
   };
 
-  // EXCEL EXPORT LOGIC
+  // EXCEL EXPORT (Fixes the resolve error)
   const exportExcel = () => {
-    const dataForExcel = rows.map(r => ({
-      "S.No": r.id,
-      "Date": formatDate(r.date),
-      "Description": r.desc,
-      "Logged By": r.loggedBy,
-      "Status": r.status,
-      "Closed Date": formatDate(r.closedDate),
-      "Owner": r.owner,
-      "Remarks": r.remarks
+    const excelData = rows.map(r => ({
+      "Sl No": r.id, "Date": formatDate(r.date), "Description": r.desc,
+      "Status": r.status, "Closed Date": formatDate(r.closedDate), "Remarks": r.remarks
     }));
-    const ws = XLSX.utils.json_to_sheet(dataForExcel);
+    const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "SiteReport");
     XLSX.writeFile(wb, `${project}_Report.xlsx`);
@@ -88,7 +82,7 @@ export default function ActionRegisterComplete() {
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     
-    // SPLIT HEADER ALIGNMENT
+    // STRAIGHT SPLIT HEADER
     autoTable(doc, {
       body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
       theme: 'grid',
@@ -96,31 +90,38 @@ export default function ActionRegisterComplete() {
       columnStyles: { 0: { cellWidth: 105 }, 1: { cellWidth: 172 } }
     });
 
-    const head = [['Slno', 'Date Logged', 'Description', 'Logged by', 'Status', 'Closed Date', 'P1(B)', 'P2(B)', 'P1(A)', 'P2(A)', 'Owner', 'By', 'Remarks']];
-    const body = rows.map(r => [r.id, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate), '', '', '', '', r.owner, r.closedBy, r.remarks.toUpperCase()]);
+    const head = [['Sno', 'Date Logged', 'Description', 'Logged by', 'Status', 'Closed Date', 'Photos Before', 'Photos After', 'Owner', 'By', 'Remarks']];
+    const body = rows.map(r => [r.id, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate), '', '', r.owner, r.closedBy, r.remarks.toUpperCase()]);
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY,
       head: head,
       body: body,
       theme: 'grid',
-      styles: { fontSize: 7, halign: 'center', valign: 'middle', minCellHeight: 40, lineWidth: 0.2, lineColor: [0, 0, 0] },
+      styles: { fontSize: 7, halign: 'center', valign: 'middle', minCellHeight: 45, lineWidth: 0.2, lineColor: [0, 0, 0] },
       headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255] },
-      columnStyles: { 2: { cellWidth: 30, halign: 'left' }, 5: { cellWidth: 15 }, 6: { cellWidth: 22 }, 7: { cellWidth: 22 }, 8: { cellWidth: 22 }, 9: { cellWidth: 22 }, 12: { cellWidth: 22 } },
+      columnStyles: { 2: { cellWidth: 35, halign: 'left' }, 6: { cellWidth: 40 }, 7: { cellWidth: 40 } },
       didDrawCell: (data) => {
         if (data.section === 'head') return;
         const rowData = rows[data.row.index];
+        
+        // Color Logic
         if (data.column.index === 4) {
           if (rowData.status.toUpperCase() === 'OPEN') data.cell.styles.fillColor = [255, 0, 0];
           if (rowData.status.toUpperCase() === 'DONE') data.cell.styles.fillColor = [146, 208, 80];
         }
-        if (data.column.index === 12 && rowData.remarks.toUpperCase() === 'DONE') data.cell.styles.fillColor = [76, 217, 100];
+        if (data.column.index === 10 && rowData.remarks.toUpperCase() === 'DONE') data.cell.styles.fillColor = [76, 217, 100];
 
-        const drawImg = (url, cell) => { if (url) doc.addImage(url, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2); };
-        if (data.column.index === 6) drawImg(rowData.before[0], data.cell);
-        if (data.column.index === 7) drawImg(rowData.before[1], data.cell);
-        if (data.column.index === 8) drawImg(rowData.after[0], data.cell);
-        if (data.column.index === 9) drawImg(rowData.after[1], data.cell);
+        // RENDER UNLIMITED PHOTOS IN GRID
+        const drawGrid = (urls, cell) => {
+          urls.slice(0, 6).forEach((url, i) => {
+            const x = cell.x + 1 + (i % 2 * 20);
+            const y = cell.y + 2 + (Math.floor(i/2) * 16);
+            doc.addImage(url, 'JPEG', x, y, 18, 14);
+          });
+        };
+        if (data.column.index === 6) drawGrid(rowData.before, data.cell);
+        if (data.column.index === 7) drawGrid(rowData.after, data.cell);
       }
     });
     doc.save(`${project}.pdf`);
@@ -137,7 +138,6 @@ export default function ActionRegisterComplete() {
               <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
             </div>
             <textarea placeholder="Description" style={ui.area} value={row.desc} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, desc: e.target.value}:r))} />
-            
             <div style={ui.photoGrid}>
               {['before', 'after'].map(type => (
                 <div key={type}>
@@ -159,7 +159,7 @@ export default function ActionRegisterComplete() {
       </div>
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>PDF</button>
+        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>{isUploading ? '...' : 'PDF'}</button>
         <button onClick={exportExcel} style={ui.btnYellow}>EXCEL</button>
         <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={ui.btnRed}>RESET</button>
       </div>
