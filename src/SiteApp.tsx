@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx'; // Make sure to run: npm install xlsx
+import * as XLSX from 'xlsx';
 
 export default function ProfessionalActionRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   
-  // STORAGE GUARD: Try-Catch to prevent Blank Screen
+  // STORAGE GUARD: Try-Catch to prevent Blank Screen and handle memory crashes
   const [rows, setRows] = useState(() => {
     try {
-      const saved = localStorage.getItem('site_v40_final');
+      const saved = localStorage.getItem('site_v50_final');
       return saved ? JSON.parse(saved) : [{ 
         id: 1, date: '2026-04-13', desc: '', loggedBy: '', 
         status: 'Open', closedDate: '', before: [], after: [], 
         owner: '', closedBy: '', remarks: '' 
       }];
     } catch (e) {
-      localStorage.removeItem('site_v40_final');
+      localStorage.removeItem('site_v50_final');
       return [{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }];
     }
   });
@@ -27,10 +27,10 @@ export default function ProfessionalActionRegister() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('site_v40_final', JSON.stringify(rows));
+      localStorage.setItem('site_v50_final', JSON.stringify(rows));
     } catch (e) {
       if (e.name === 'QuotaExceededError') {
-        alert("Memory Full! Reset to continue.");
+        alert("Memory Full! Older data cleared to prevent white screen crash.");
       }
     }
   }, [rows]);
@@ -46,32 +46,35 @@ export default function ProfessionalActionRegister() {
     setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
   };
 
-  // LAG FREE: Cloudinary URL storage
+  // LAG FREE: Sequential Cloudinary upload for 100+ photos
   const uploadPhoto = async (id, type, files) => {
     setIsUploading(true);
-    for (const file of Array.from(files)) {
+    const fileArray = Array.from(files);
+    for (const file of fileArray) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("upload_preset", UPLOAD_PRESET);
       try {
         const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
         const data = await res.json();
-        setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], data.secure_url] } : r));
-      } catch (e) { alert("Upload Error!"); }
+        if (data.secure_url) {
+          setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], data.secure_url] } : r));
+        }
+      } catch (e) { alert("Upload error!"); }
     }
     setIsUploading(false);
   };
 
-  // INDIVIDUAL DELETE (Red X Button)
+  // INDIVIDUAL PHOTO DELETE (Red X)
   const removePhoto = (id, type, index) => {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: r[type].filter((_, i) => i !== index) } : r));
   };
 
-  // EXCEL EXPORT (Fixes the resolve error)
+  // EXCEL EXPORT FEATURE
   const exportExcel = () => {
     const excelData = rows.map(r => ({
-      "Sl No": r.id, "Date": formatDate(r.date), "Description": r.desc,
-      "Status": r.status, "Closed Date": formatDate(r.closedDate), "Remarks": r.remarks
+      "Sl No": r.id, "Date": formatDate(r.date), "Description": r.desc, "Logged By": r.loggedBy,
+      "Status": r.status, "Closed Date": formatDate(r.closedDate), "Owner": r.owner, "By": r.closedBy, "Remarks": r.remarks
     }));
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
@@ -82,7 +85,7 @@ export default function ProfessionalActionRegister() {
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     
-    // STRAIGHT SPLIT HEADER
+    // STRAIGHT SPLIT HEADER ALIGNMENT
     autoTable(doc, {
       body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
       theme: 'grid',
@@ -134,7 +137,7 @@ export default function ProfessionalActionRegister() {
         {rows.map(row => (
           <div key={row.id} style={ui.card}>
             <div style={ui.topRow}>
-              <strong>S.No: {row.id}</strong>
+              <strong>ID #{row.id}</strong>
               <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
             </div>
             <textarea placeholder="Description" style={ui.area} value={row.desc} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, desc: e.target.value}:r))} />
