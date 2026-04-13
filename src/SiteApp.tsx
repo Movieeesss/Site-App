@@ -70,15 +70,15 @@ export default function FinalTenColumnRegister() {
     });
 
     // DYNAMIC PHOTO COLUMN LOGIC
-    // Find the maximum number of photos in any row to create enough columns
     const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
     const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
 
     const beforeHeaders = Array.from({ length: maxBefore }, (_, i) => `P${i + 1}(B)`);
     const afterHeaders = Array.from({ length: maxAfter }, (_, i) => `P${i + 1}(A)`);
 
+    // UPDATED FULL TEXT HEADERS
     const head = [[
-      'Slno', 'Date', 'Desc', 'By', 'Status', 'Closed', 
+      'S.No', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
       ...beforeHeaders, 
       ...afterHeaders, 
       'Owner', 'Remarks'
@@ -86,7 +86,7 @@ export default function FinalTenColumnRegister() {
 
     const body = rows.map(r => [
       r.id, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
-      ...Array(maxBefore + maxAfter).fill(''), // Placeholders for photos
+      ...Array(maxBefore + maxAfter).fill(''), 
       r.owner, r.remarks.toUpperCase()
     ]);
 
@@ -112,12 +112,11 @@ export default function FinalTenColumnRegister() {
           if (url) doc.addImage(url, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
         };
 
-        // Before Photos dynamic mapping
+        // Photo mapping start index shifted to 6 because of full headers
         if (data.column.index >= 6 && data.column.index < 6 + maxBefore) {
           const imgIdx = data.column.index - 6;
           drawImg(rowData.before[imgIdx], data.cell);
         }
-        // After Photos dynamic mapping
         if (data.column.index >= 6 + maxBefore && data.column.index < 6 + maxBefore + maxAfter) {
           const imgIdx = data.column.index - (6 + maxBefore);
           drawImg(rowData.after[imgIdx], data.cell);
