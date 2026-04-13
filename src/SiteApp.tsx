@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx'; // Install using: npm install xlsx
 
-export default function UnlimitedPhotoRegister() {
+export default function ActionRegisterComplete() {
   const [project, setProject] = useState("FLORA VILLA-75E");
+  
+  // STORAGE GUARD: Try-Catch logic to prevent Blank Screen
   const [rows, setRows] = useState(() => {
-    const saved = localStorage.getItem('site_v26_unlimited');
-    return saved ? JSON.parse(saved) : [{ 
-      id: 1, date: '2026-04-13', desc: '', loggedBy: '', 
-      status: 'Open', closedDate: '', before: [], after: [], 
-      owner: '', closedBy: '', remarks: '' 
-    }];
+    try {
+      const saved = localStorage.getItem('site_v35_pro');
+      return saved ? JSON.parse(saved) : [{ 
+        id: 1, date: '2026-04-13', desc: '', loggedBy: '', 
+        status: 'Open', closedDate: '', before: [], after: [], 
+        owner: '', closedBy: '', remarks: '' 
+      }];
+    } catch (e) {
+      console.error("Storage Error - Memory Cleared");
+      localStorage.removeItem('site_v35_pro');
+      return [{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', before: [], after: [], owner: '', closedBy: '', remarks: '' }];
+    }
   });
 
   const [isUploading, setIsUploading] = useState(false);
@@ -18,7 +27,13 @@ export default function UnlimitedPhotoRegister() {
   const UPLOAD_PRESET = "ml_default"; 
 
   useEffect(() => {
-    localStorage.setItem('site_v26_unlimited', JSON.stringify(rows));
+    try {
+      localStorage.setItem('site_v35_pro', JSON.stringify(rows));
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        alert("Local Storage Full! Please Reset or Export data.");
+      }
+    }
   }, [rows]);
 
   const formatDate = (dateStr) => {
@@ -29,17 +44,12 @@ export default function UnlimitedPhotoRegister() {
 
   const addRow = () => {
     const newId = rows.length > 0 ? rows[rows.length - 1].id + 1 : 1;
-    setRows([...rows, { 
-      id: newId, date: '2026-04-13', desc: '', loggedBy: '', 
-      status: 'Open', closedDate: '', before: [], after: [], 
-      owner: '', closedBy: '', remarks: '' 
-    }]);
+    setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
   };
 
   const uploadPhoto = async (id, type, files) => {
     setIsUploading(true);
-    const fileArray = Array.from(files);
-    for (const file of fileArray) {
+    for (const file of Array.from(files)) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("upload_preset", UPLOAD_PRESET);
@@ -52,10 +62,33 @@ export default function UnlimitedPhotoRegister() {
     setIsUploading(false);
   };
 
+  // DELETE FEATURE: X button logic to clear storage space
+  const removePhoto = (id, type, index) => {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: r[type].filter((_, i) => i !== index) } : r));
+  };
+
+  // EXCEL EXPORT LOGIC
+  const exportExcel = () => {
+    const dataForExcel = rows.map(r => ({
+      "S.No": r.id,
+      "Date": formatDate(r.date),
+      "Description": r.desc,
+      "Logged By": r.loggedBy,
+      "Status": r.status,
+      "Closed Date": formatDate(r.closedDate),
+      "Owner": r.owner,
+      "Remarks": r.remarks
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataForExcel);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SiteReport");
+    XLSX.writeFile(wb, `${project}_Report.xlsx`);
+  };
+
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     
-    // 1. TOP SPLIT HEADER
+    // SPLIT HEADER ALIGNMENT
     autoTable(doc, {
       body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
       theme: 'grid',
@@ -63,53 +96,34 @@ export default function UnlimitedPhotoRegister() {
       columnStyles: { 0: { cellWidth: 105 }, 1: { cellWidth: 172 } }
     });
 
-    const head = [['Slno', 'Date Logged', 'Description', 'Logged by', 'Status', 'Closed Date', 'Photos Before (All)', 'Photos After (All)', 'Owner', 'By', 'Remarks']];
-
-    const body = rows.map(r => [
-      r.id, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate), '', '', r.owner, r.closedBy, r.remarks.toUpperCase()
-    ]);
+    const head = [['Slno', 'Date Logged', 'Description', 'Logged by', 'Status', 'Closed Date', 'P1(B)', 'P2(B)', 'P1(A)', 'P2(A)', 'Owner', 'By', 'Remarks']];
+    const body = rows.map(r => [r.id, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate), '', '', '', '', r.owner, r.closedBy, r.remarks.toUpperCase()]);
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY,
       head: head,
       body: body,
       theme: 'grid',
-      styles: { fontSize: 7, halign: 'center', valign: 'middle', minCellHeight: 60, lineWidth: 0.2, lineColor: [0, 0, 0] },
-      headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255], fontStyle: 'bold' },
-      columnStyles: { 
-        2: { cellWidth: 30, halign: 'left' },
-        5: { cellWidth: 15 },
-        6: { cellWidth: 45 }, // Photo columns width increased for multiple pics
-        7: { cellWidth: 45 },
-        10: { cellWidth: 15 } 
-      },
+      styles: { fontSize: 7, halign: 'center', valign: 'middle', minCellHeight: 40, lineWidth: 0.2, lineColor: [0, 0, 0] },
+      headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255] },
+      columnStyles: { 2: { cellWidth: 30, halign: 'left' }, 5: { cellWidth: 15 }, 6: { cellWidth: 22 }, 7: { cellWidth: 22 }, 8: { cellWidth: 22 }, 9: { cellWidth: 22 }, 12: { cellWidth: 22 } },
       didDrawCell: (data) => {
         if (data.section === 'head') return;
         const rowData = rows[data.row.index];
-
-        // Status & Remarks Color Logic
         if (data.column.index === 4) {
           if (rowData.status.toUpperCase() === 'OPEN') data.cell.styles.fillColor = [255, 0, 0];
           if (rowData.status.toUpperCase() === 'DONE') data.cell.styles.fillColor = [146, 208, 80];
         }
-        if (data.column.index === 10 && rowData.remarks.toUpperCase() === 'DONE') data.cell.styles.fillColor = [76, 217, 100];
+        if (data.column.index === 12 && rowData.remarks.toUpperCase() === 'DONE') data.cell.styles.fillColor = [76, 217, 100];
 
-        // UNLIMITED PHOTO RENDER LOGIC
-        const drawGridPhotos = (urls, cell) => {
-          if (!urls || urls.length === 0) return;
-          urls.slice(0, 6).forEach((url, i) => { // Maximum 6 photos per cell for safety
-            const x = cell.x + 1 + (i % 2 * 22); // 2 columns grid
-            const y = cell.y + 2 + (Math.floor(i / 2) * 18);
-            doc.addImage(url, 'JPEG', x, y, 20, 16);
-          });
-        };
-
-        if (data.column.index === 6) drawGridPhotos(rowData.before, data.cell);
-        if (data.column.index === 7) drawGridPhotos(rowData.after, data.cell);
+        const drawImg = (url, cell) => { if (url) doc.addImage(url, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2); };
+        if (data.column.index === 6) drawImg(rowData.before[0], data.cell);
+        if (data.column.index === 7) drawImg(rowData.before[1], data.cell);
+        if (data.column.index === 8) drawImg(rowData.after[0], data.cell);
+        if (data.column.index === 9) drawImg(rowData.after[1], data.cell);
       }
     });
-
-    doc.save(`${project}_Final.pdf`);
+    doc.save(`${project}.pdf`);
   };
 
   return (
@@ -123,9 +137,21 @@ export default function UnlimitedPhotoRegister() {
               <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
             </div>
             <textarea placeholder="Description" style={ui.area} value={row.desc} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, desc: e.target.value}:r))} />
+            
             <div style={ui.photoGrid}>
-              <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
-              <label style={ui.upBtn}>📸 After ({row.after.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'after', e.target.files)} /></label>
+              {['before', 'after'].map(type => (
+                <div key={type}>
+                  <label style={ui.upBtn}>📸 {type.toUpperCase()} <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, type, e.target.files)} /></label>
+                  <div style={ui.thumbGrid}>
+                    {row[type].map((url, i) => (
+                      <div key={i} style={ui.thumbWrap}>
+                        <img src={url} style={ui.thumb} alt="site" />
+                        <button onClick={() => removePhoto(row.id, type, i)} style={ui.delBtn}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
             <input placeholder="Remarks" style={ui.field} value={row.remarks} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, remarks: e.target.value}:r))} />
           </div>
@@ -133,25 +159,33 @@ export default function UnlimitedPhotoRegister() {
       </div>
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>{isUploading ? 'SYNC...' : 'GET PDF'}</button>
+        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>PDF</button>
+        <button onClick={exportExcel} style={ui.btnYellow}>EXCEL</button>
+        <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={ui.btnRed}>RESET</button>
       </div>
     </div>
   );
 }
 
 const ui = {
-  container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '110px', fontFamily: 'Arial' },
+  container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '120px', fontFamily: 'Arial' },
   nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10 },
   headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
   main: { padding: '12px' },
-  card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e0e6ed' },
+  card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' },
   badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
-  area: { width: '100%', height: '65px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box' },
+  area: { width: '100%', height: '60px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box' },
   photoGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', margin: '12px 0' },
-  upBtn: { background: '#f8f9fa', padding: '10px', display: 'block', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '12px', cursor: 'pointer' },
-  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '10px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box' },
+  upBtn: { background: '#f8f9fa', padding: '10px', display: 'block', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '10px', cursor: 'pointer' },
+  thumbGrid: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' },
+  thumbWrap: { position: 'relative', width: '40px', height: '40px' },
+  thumb: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
+  delBtn: { position: 'absolute', top: -5, right: -5, background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '15px', height: '15px', fontSize: '10px' },
+  field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
+  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '8px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box' },
   btnGreen: { flex: 1, padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
   btnBlue: { flex: 1, padding: '15px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' }
+  btnYellow: { flex: 1, padding: '15px', background: '#ffc107', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
+  btnRed: { padding: '15px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
 };
