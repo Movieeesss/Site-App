@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// UNGA CREDENTIALS
 const CLIENT_ID = "683400126186-f3a9u3fbe6l50bv1vidci7oinq7socn6.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets";
 
@@ -20,20 +19,16 @@ export default function FinalTenColumnRegister() {
   const [accessToken, setAccessToken] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Auto-load Google Script
   useEffect(() => {
     const script = document.createElement('script');
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
     document.body.appendChild(script);
-    
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
-    
     return () => { if(document.body.contains(script)) document.body.removeChild(script); };
   }, [rows]);
 
-  // GOOGLE LOGIN LOGIC
   const handleLogin = () => {
     if (!window.google) return alert("Google Script ready aagala. Refresh pannunga!");
     const client = window.google.accounts.oauth2.initTokenClient({
@@ -55,51 +50,38 @@ export default function FinalTenColumnRegister() {
     return `${day}-${month}-${year}`;
   };
 
-  const addRow = () => {
-    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
-    setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
-  };
-
-  const deleteRow = (id) => {
-    if (window.confirm("Indha row-ah delete panna poringala?")) {
-      setRows(rows.filter(row => row.id !== id));
-    }
-  };
-
-  const clearAll = () => {
-    if (window.confirm("Ella data-vum delete aagidum. Sure-ah?")) {
-      setRows([{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
-      localStorage.removeItem('site_v20_final');
-    }
-  };
-
-  // UPLOAD TO GOOGLE DRIVE (Replaced Cloudinary)
   const uploadPhoto = async (id, type, files) => {
     if (!accessToken) return alert("Modhala Login with Google pannunga!");
     setIsUploading(true);
     
     for (const file of Array.from(files)) {
-      const metadata = {
-        name: `${project}_${type}_${Date.now()}.jpg`,
-        mimeType: file.type
+      // 1. Local Preview creation (Base64)
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64data = reader.result;
+        
+        // 2. Upload to Google Drive
+        const metadata = { name: `${project}_${type}_${Date.now()}.jpg`, mimeType: file.type };
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
+
+        try {
+          const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+            body: form
+          });
+          const data = await res.json();
+          
+          // Save both Drive Link and Base64 (for PDF/Preview)
+          setRows(prev => prev.map(r => r.id === id ? { 
+            ...r, 
+            [type]: [...r[type], { drive: data.webViewLink, preview: base64data }] 
+          } : r));
+        } catch (e) { console.error("Drive upload error", e); }
       };
-
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', file);
-
-      try {
-        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          body: form
-        });
-        const data = await res.json();
-        // data.webViewLink-ah row-la save pannuvom
-        setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], data.webViewLink] } : r));
-      } catch (e) {
-        console.error("Drive upload error", e);
-      }
+      reader.readAsDataURL(file);
     }
     setIsUploading(false);
   };
@@ -137,6 +119,23 @@ export default function FinalTenColumnRegister() {
       didDrawCell: (data) => {
         if (data.section === 'head') return;
         const rowData = rows[data.row.index];
+        
+        // Image drawing logic for PDF
+        const drawImg = (imgObj, cell) => {
+          if (imgObj && imgObj.preview) {
+            doc.addImage(imgObj.preview, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
+          }
+        };
+
+        if (data.column.index >= 6 && data.column.index < 6 + maxBefore) {
+          const imgIdx = data.column.index - 6;
+          drawImg(rowData.before[imgIdx], data.cell);
+        }
+        if (data.column.index >= 6 + maxBefore && data.column.index < 6 + maxBefore + maxAfter) {
+          const imgIdx = data.column.index - (6 + maxBefore);
+          drawImg(rowData.after[imgIdx], data.cell);
+        }
+
         if (data.column.index === 4) {
           if (rowData.status.toUpperCase() === 'OPEN') data.cell.styles.fillColor = [255, 0, 0];
           if (rowData.status.toUpperCase() === 'DONE') data.cell.styles.fillColor = [146, 208, 80];
@@ -144,6 +143,24 @@ export default function FinalTenColumnRegister() {
       }
     });
     doc.save(`${project}_Final_Report.pdf`);
+  };
+
+  const addRow = () => {
+    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+    setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
+  };
+
+  const deleteRow = (id) => {
+    if (window.confirm("Indha row-ah delete panna poringala?")) {
+      setRows(rows.filter(row => row.id !== id));
+    }
+  };
+
+  const clearAll = () => {
+    if (window.confirm("Ella data-vum delete aagidum. Sure-ah?")) {
+      setRows([{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
+      localStorage.removeItem('site_v20_final');
+    }
   };
 
   return (
@@ -181,16 +198,16 @@ export default function FinalTenColumnRegister() {
               <div style={ui.uploadSection}>
                 <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
                 <div style={ui.thumbnailRow}>
-                  {row.before.map((url, idx) => (
-                    <div key={idx} style={ui.thumbWrap}><img src={url} style={ui.thumbImg} /><button onClick={() => deletePhoto(row.id, 'before', idx)} style={ui.delBtn}>×</button></div>
+                  {row.before.map((img, idx) => (
+                    <div key={idx} style={ui.thumbWrap}><img src={img.preview} style={ui.thumbImg} alt="b"/><button onClick={() => deletePhoto(row.id, 'before', idx)} style={ui.delBtn}>×</button></div>
                   ))}
                 </div>
               </div>
               <div style={ui.uploadSection}>
                 <label style={ui.upBtn}>📸 After ({row.after.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'after', e.target.files)} /></label>
                 <div style={ui.thumbnailRow}>
-                  {row.after.map((url, idx) => (
-                    <div key={idx} style={ui.thumbWrap}><img src={url} style={ui.thumbImg} /><button onClick={() => deletePhoto(row.id, 'after', idx)} style={ui.delBtn}>×</button></div>
+                  {row.after.map((img, idx) => (
+                    <div key={idx} style={ui.thumbWrap}><img src={img.preview} style={ui.thumbImg} alt="a"/><button onClick={() => deletePhoto(row.id, 'after', idx)} style={ui.delBtn}>×</button></div>
                   ))}
                 </div>
               </div>
