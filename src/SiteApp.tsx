@@ -21,40 +21,26 @@ export default function FinalTenColumnRegister() {
   useEffect(() => {
     const script = document.createElement('script');
     script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
+    script.async = true; script.defer = true;
     document.body.appendChild(script);
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
     return () => { if(document.body.contains(script)) document.body.removeChild(script); };
   }, [rows]);
 
   const handleLogin = () => {
-    if (!window.google) return alert("Google Script ready aagala. Refresh pannunga!");
+    if (!window.google) return alert("Google Script ready aagala. Refresh!");
     const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: (response) => {
-        if (response.access_token) {
-          setAccessToken(response.access_token);
-        }
-      },
+      client_id: CLIENT_ID, scope: SCOPES,
+      callback: (res) => { if (res.access_token) setAccessToken(res.access_token); },
     });
     client.requestAccessToken();
   };
 
-  const handleDisconnect = () => {
-    setAccessToken(null);
-    alert("Google Drive Disconnected!");
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "";
-    const [year, month, day] = dateStr.split("-");
-    return `${day}-${month}-${year}`;
-  };
+  const handleDisconnect = () => { setAccessToken(null); alert("Disconnected!"); };
+  const formatDate = (d) => d ? d.split("-").reverse().join("-") : "";
 
   const uploadPhoto = async (id, type, files) => {
-    if (!accessToken) return alert("Modhala 'Connect Drive' pannunga!");
+    if (!accessToken) return alert("Connect Drive First!");
     setIsUploading(true);
     for (const file of Array.from(files)) {
       const reader = new FileReader();
@@ -65,25 +51,23 @@ export default function FinalTenColumnRegister() {
         img.onload = async () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          const maxWidth = 400; 
+          const maxWidth = 400;
           const scale = maxWidth / img.width;
-          canvas.width = maxWidth;
-          canvas.height = img.height * scale;
+          canvas.width = maxWidth; canvas.height = img.height * scale;
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          const compressed = canvas.toDataURL('image/jpeg', 0.7);
+
           const metadata = { name: `${project}_${type}_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
           const form = new FormData();
           form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
           form.append('file', file);
           try {
             const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${accessToken}` },
-              body: form
+              method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}` }, body: form
             });
             const data = await res.json();
-            setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], { drive: data.webViewLink, preview: compressedBase64 }] } : r));
-          } catch (e) { console.error("Drive upload error", e); }
+            setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], { drive: data.webViewLink, preview: compressed }] } : r));
+          } catch (e) { console.error(e); }
         };
       };
       reader.readAsDataURL(file);
@@ -91,72 +75,75 @@ export default function FinalTenColumnRegister() {
     setIsUploading(false);
   };
 
-  const deletePhoto = (rowId, type, photoIndex) => {
-    setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, index) => index !== photoIndex) } : r));
+  const deletePhoto = (rowId, type, idx) => {
+    setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, i) => i !== idx) } : r));
   };
 
+  // OPTIMIZED SPLIT PDF LOGIC (5 ROWS PER BATCH)
   const generatePDF = async () => {
-    try {
+    if (rows.length === 0) return;
+    const batchSize = 5; // Memory safe size
+    const totalBatches = Math.ceil(rows.length / batchSize);
+    
+    alert(`Total ${totalBatches} PDF files download aagum. Oru nimisham wait pannunga!`);
+
+    for (let i = 0; i < totalBatches; i++) {
+      const start = i * batchSize;
+      const batchRows = rows.slice(start, start + batchSize);
       const doc = new jsPDF('l', 'mm', 'a4');
+      
       autoTable(doc, {
         body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
         theme: 'grid',
         styles: { fontSize: 10, fontStyle: 'bold', halign: 'left', fillColor: [211, 211, 211] }
       });
 
-      const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
-      const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
-
-      // UPDATED HEADERS BASED ON IMAGE_627CAA.PNG
+      const maxBefore = Math.max(...batchRows.map(r => r.before.length), 1);
+      const maxAfter = Math.max(...batchRows.map(r => r.after.length), 1);
+      
       const head = [[
         'Slno', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
-        ...Array.from({ length: maxBefore }, (_, i) => `P${i+1}(B)`), 
-        ...Array.from({ length: maxAfter }, (_, i) => `P${i+1}(A)`), 
+        ...Array.from({ length: maxBefore }, (_, idx) => `P${idx+1}(B)`), 
+        ...Array.from({ length: maxAfter }, (_, idx) => `P${idx+1}(A)`), 
         'Owner', 'Closed By', 'Remarks'
       ]];
 
-      const body = rows.map((r, index) => [
-        index + 1, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
+      const body = batchRows.map((r, idx) => [
+        start + idx + 1, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
         ...Array(maxBefore + maxAfter).fill(''), 
         r.owner, r.closedBy, r.remarks.toUpperCase()
       ]);
 
       autoTable(doc, {
-        startY: doc.lastAutoTable.finalY,
-        head: head,
-        body: body,
-        theme: 'grid',
-        styles: { fontSize: 4.5, halign: 'center', valign: 'middle', minCellHeight: 18, overflow: 'linebreak' },
+        startY: doc.lastAutoTable.finalY, head: head, body: body, theme: 'grid',
+        styles: { fontSize: 4.5, halign: 'center', valign: 'middle', minCellHeight: 18 },
         headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255] },
         didDrawCell: (data) => {
           if (data.section === 'head') return;
-          const rowData = rows[data.row.index];
+          const rowData = batchRows[data.row.index];
           if (data.column.index === 4) {
             data.cell.styles.fillColor = rowData.status.toUpperCase() === 'OPEN' ? [255, 0, 0] : [146, 208, 80];
           }
           const drawImg = (imgObj, cell) => {
             if (imgObj && imgObj.preview) {
-              try {
-                doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1, undefined, 'FAST');
-              } catch (err) { console.error(err); }
+              try { doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1, undefined, 'FAST'); }
+              catch (err) { console.error(err); }
             }
           };
           const photoStart = 6;
           if (data.column.index >= photoStart && data.column.index < photoStart + maxBefore) {
-            const idx = data.column.index - photoStart;
-            if (rowData.before[idx]) drawImg(rowData.before[idx], data.cell);
+            drawImg(rowData.before[data.column.index - photoStart], data.cell);
           }
           if (data.column.index >= photoStart + maxBefore && data.column.index < photoStart + maxBefore + maxAfter) {
-            const idx = data.column.index - (photoStart + maxBefore);
-            if (rowData.after[idx]) drawImg(rowData.after[idx], data.cell);
+            drawImg(rowData.after[data.column.index - (photoStart + maxBefore)], data.cell);
           }
         }
       });
 
-      const pdfBlob = doc.output('blob');
-      doc.save(`${project}_Final_Report.pdf`);
-      URL.revokeObjectURL(pdfBlob);
-    } catch (e) { alert("PDF Error: Rows split panni try pannunga."); }
+      doc.save(`${project}_Part_${i+1}.pdf`);
+      // Short delay between downloads to help browser memory
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   };
 
   const addRow = () => {
@@ -164,18 +151,8 @@ export default function FinalTenColumnRegister() {
     setRows([...rows, { id: newId, date: '2026-04-14', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
   };
 
-  const deleteRow = (id) => {
-    if (window.confirm("Indha row-ah delete panna poringala?")) {
-      setRows(rows.filter(row => row.id !== id));
-    }
-  };
-
-  const clearAll = () => {
-    if (window.confirm("Ella data-vum delete aagidum. Sure-ah?")) {
-      setRows([{ id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
-      localStorage.removeItem('site_v20_final');
-    }
-  };
+  const deleteRow = (id) => { if (window.confirm("Delete?")) setRows(rows.filter(r => r.id !== id)); };
+  const clearAll = () => { if (window.confirm("Clear All?")) { setRows([{ id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', remarks: '' }]); localStorage.removeItem('site_v20_final'); } };
 
   return (
     <div style={ui.container}>
@@ -183,7 +160,6 @@ export default function FinalTenColumnRegister() {
         {!accessToken ? <button onClick={handleLogin} style={ui.authBtn}>Connect Drive</button> : <button onClick={handleDisconnect} style={ui.disBtn}>Disconnect Drive (✓)</button>}
         <input value={project} onChange={e => setProject(e.target.value)} style={ui.headIn} />
       </header>
-      
       <div style={ui.main}>
         {rows.map((row, index) => (
           <div key={row.id} style={ui.card}>
@@ -203,9 +179,7 @@ export default function FinalTenColumnRegister() {
                <div style={{fontSize:'10px'}}>Actual Closed Date: <input type="date" style={ui.field} value={row.closedDate} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedDate: e.target.value}:r))} /></div>
                <input placeholder="Owner" style={ui.field} value={row.owner} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, owner: e.target.value}:r))} />
             </div>
-            {/* ADDED CLOSED BY FIELD BASED ON IMAGE_627CE6.PNG */}
             <input placeholder="Closed By" style={{...ui.field, marginBottom:'10px'}} value={row.closedBy} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedBy: e.target.value}:r))} />
-            
             <div style={ui.photoGrid}>
               <div style={ui.uploadSection}>
                 <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
@@ -222,7 +196,7 @@ export default function FinalTenColumnRegister() {
       </div>
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>{isUploading ? 'Uploading...' : 'GET PDF'}</button>
+        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>GET PDF</button>
         <button onClick={clearAll} style={ui.btnRed}>CLEAR ALL</button>
       </div>
     </div>
@@ -232,14 +206,14 @@ export default function FinalTenColumnRegister() {
 const ui = {
   container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '110px', fontFamily: 'Arial' },
   nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' },
-  authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '12px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' },
-  disBtn: { background: '#92d050', color: '#1a1c1e', border: 'none', padding: '12px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' },
+  authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '12px', borderRadius: '4px', fontWeight: 'bold' },
+  disBtn: { background: '#92d050', color: '#1a1c1e', border: 'none', padding: '12px', borderRadius: '4px', fontWeight: 'bold' },
   headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
   main: { padding: '12px' },
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
-  snoBadge: { fontSize: '14px', fontWeight: 'bold', color: '#333' },
-  rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' },
+  snoBadge: { fontSize: '14px', fontWeight: 'bold' },
+  rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px' },
   badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
@@ -250,7 +224,7 @@ const ui = {
   thumbnailRow: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' },
   thumbWrap: { position: 'relative', width: '40px', height: '40px' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
-  delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px' },
   footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '10px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box', zIndex: 10 },
   btnGreen: { flex: 1, padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
   btnBlue: { flex: 1, padding: '15px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
