@@ -28,8 +28,18 @@ export default function FinalTenColumnRegister() {
   };
 
   const addRow = () => {
-    const newId = rows.length > 0 ? rows[rows.length - 1].id + 1 : 1;
+    // S.No logic updated to be sequential based on array length
+    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
     setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
+  };
+
+  // NEW: Delete specific row function
+  const deleteRow = (id) => {
+    if (window.confirm("Indha row-ah delete panna poringala?")) {
+      const updatedRows = rows.filter(row => row.id !== id);
+      // Optional: S.No-ah refresh panna idhai use pannalam, illena id apdiye irukkum
+      setRows(updatedRows);
+    }
   };
 
   const clearAll = () => {
@@ -61,7 +71,6 @@ export default function FinalTenColumnRegister() {
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     
-    // 1. Split Header (Villa Name & Action Register)
     autoTable(doc, {
       body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
       theme: 'grid',
@@ -69,14 +78,12 @@ export default function FinalTenColumnRegister() {
       columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 177 } }
     });
 
-    // DYNAMIC PHOTO COLUMN LOGIC
     const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
     const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
 
     const beforeHeaders = Array.from({ length: maxBefore }, (_, i) => `P${i + 1}(B)`);
     const afterHeaders = Array.from({ length: maxAfter }, (_, i) => `P${i + 1}(A)`);
 
-    // UPDATED FULL TEXT HEADERS
     const head = [[
       'S.No', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
       ...beforeHeaders, 
@@ -84,8 +91,9 @@ export default function FinalTenColumnRegister() {
       'Owner', 'Remarks'
     ]];
 
-    const body = rows.map(r => [
-      r.id, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
+    const body = rows.map((r, index) => [
+      index + 1, // PDF-la S.No correct-ah varum
+      formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
       ...Array(maxBefore + maxAfter).fill(''), 
       r.owner, r.remarks.toUpperCase()
     ]);
@@ -102,7 +110,6 @@ export default function FinalTenColumnRegister() {
         if (data.section === 'head') return;
         const rowData = rows[data.row.index];
 
-        // Status Colors
         if (data.column.index === 4) {
           if (rowData.status.toUpperCase() === 'OPEN') data.cell.styles.fillColor = [255, 0, 0];
           if (rowData.status.toUpperCase() === 'DONE') data.cell.styles.fillColor = [146, 208, 80];
@@ -112,7 +119,6 @@ export default function FinalTenColumnRegister() {
           if (url) doc.addImage(url, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
         };
 
-        // Photo mapping start index shifted to 6 because of full headers
         if (data.column.index >= 6 && data.column.index < 6 + maxBefore) {
           const imgIdx = data.column.index - 6;
           drawImg(rowData.before[imgIdx], data.cell);
@@ -131,10 +137,14 @@ export default function FinalTenColumnRegister() {
     <div style={ui.container}>
       <header style={ui.nav}><input value={project} onChange={e => setProject(e.target.value)} style={ui.headIn} /></header>
       <div style={ui.main}>
-        {rows.map(row => (
+        {rows.map((row, index) => (
           <div key={row.id} style={ui.card}>
             <div style={ui.topRow}>
-              <strong>S.No: {row.id}</strong>
+              {/* S.No text-ah control panna mudiyadha padi normal span-ah mathiyachu */}
+              <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                <span style={ui.snoBadge}>S.No: {index + 1}</span>
+                <button onClick={() => deleteRow(row.id)} style={ui.rowDelBtn}>Delete</button>
+              </div>
               <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
             </div>
             <div style={ui.inputGrid}>
@@ -185,8 +195,10 @@ const ui = {
   headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
   main: { padding: '12px' },
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e0e6ed' },
-  topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' },
+  topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
   badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
+  snoBadge: { fontSize: '14px', fontWeight: 'bold', color: '#333' },
+  rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
   area: { width: '100%', height: '65px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box', marginBottom: '10px' },
