@@ -9,9 +9,9 @@ export default function FinalTenColumnRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   const [isUploading, setIsUploading] = useState(false);
   
-  // Persistence for Login (Reload pannaalum disconnect aagaadhu)
-  const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('drive_token'));
-  
+  // Persistent Login Logic: Token sessionStorage-la irundhu edukkum
+  const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('drive_access_token'));
+
   const [rows, setRows] = useState(() => {
     const saved = localStorage.getItem('site_v20_final');
     return saved ? JSON.parse(saved) : [{ 
@@ -27,7 +27,12 @@ export default function FinalTenColumnRegister() {
     script.async = true; script.defer = true;
     document.body.appendChild(script);
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
-    if (accessToken) sessionStorage.setItem('drive_token', accessToken);
+    
+    // Refresh pannaalum disconnect aagama irukka token-ah save pannuvom
+    if (accessToken) {
+      sessionStorage.setItem('drive_access_token', accessToken);
+    }
+
     return () => { if(document.body.contains(script)) document.body.removeChild(script); };
   }, [rows, accessToken]);
 
@@ -38,8 +43,8 @@ export default function FinalTenColumnRegister() {
       callback: (res) => { 
         if (res.access_token) {
           setAccessToken(res.access_token);
-          sessionStorage.setItem('drive_token', res.access_token);
-        }
+          sessionStorage.setItem('drive_access_token', res.access_token);
+        } 
       },
     });
     client.requestAccessToken();
@@ -47,7 +52,7 @@ export default function FinalTenColumnRegister() {
 
   const handleDisconnect = () => { 
     setAccessToken(null); 
-    sessionStorage.removeItem('drive_token');
+    sessionStorage.removeItem('drive_access_token');
     alert("Disconnected!"); 
   };
 
@@ -93,7 +98,6 @@ export default function FinalTenColumnRegister() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, i) => i !== idx) } : r));
   };
 
-  // SPLIT PDF LOGIC (10 ROWS PER BATCH: 1-10, 11-20...)
   const generatePDF = async () => {
     if (rows.length === 0) return;
     const batchSize = 10; 
