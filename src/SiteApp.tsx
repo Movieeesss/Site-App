@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { jsPDF } from 'jsPDF';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const CLIENT_ID = "683400126186-f3a9u3fbe6l50bv1vidci7oinq7socn6.apps.googleusercontent.com";
@@ -106,8 +106,8 @@ export default function FinalTenColumnRegister() {
 
       const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
       const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
-      
-      // Updated Header based on your image references [cite: 6, 7, 8]
+
+      // UPDATED HEADERS BASED ON IMAGE_627CAA.PNG
       const head = [[
         'Slno', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
         ...Array.from({ length: maxBefore }, (_, i) => `P${i+1}(B)`), 
@@ -153,7 +153,9 @@ export default function FinalTenColumnRegister() {
         }
       });
 
+      const pdfBlob = doc.output('blob');
       doc.save(`${project}_Final_Report.pdf`);
+      URL.revokeObjectURL(pdfBlob);
     } catch (e) { alert("PDF Error: Rows split panni try pannunga."); }
   };
 
@@ -181,6 +183,7 @@ export default function FinalTenColumnRegister() {
         {!accessToken ? <button onClick={handleLogin} style={ui.authBtn}>Connect Drive</button> : <button onClick={handleDisconnect} style={ui.disBtn}>Disconnect Drive (✓)</button>}
         <input value={project} onChange={e => setProject(e.target.value)} style={ui.headIn} />
       </header>
+      
       <div style={ui.main}>
         {rows.map((row, index) => (
           <div key={row.id} style={ui.card}>
@@ -200,7 +203,9 @@ export default function FinalTenColumnRegister() {
                <div style={{fontSize:'10px'}}>Actual Closed Date: <input type="date" style={ui.field} value={row.closedDate} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedDate: e.target.value}:r))} /></div>
                <input placeholder="Owner" style={ui.field} value={row.owner} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, owner: e.target.value}:r))} />
             </div>
+            {/* ADDED CLOSED BY FIELD BASED ON IMAGE_627CE6.PNG */}
             <input placeholder="Closed By" style={{...ui.field, marginBottom:'10px'}} value={row.closedBy} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedBy: e.target.value}:r))} />
+            
             <div style={ui.photoGrid}>
               <div style={ui.uploadSection}>
                 <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
@@ -233,7 +238,7 @@ const ui = {
   main: { padding: '12px' },
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
-  snoBadge: { fontSize: '14px', fontWeight: 'bold' },
+  snoBadge: { fontSize: '14px', fontWeight: 'bold', color: '#333' },
   rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' },
   badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
