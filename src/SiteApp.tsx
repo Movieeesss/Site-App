@@ -62,13 +62,12 @@ export default function FinalTenColumnRegister() {
       reader.onloadend = async () => {
         const base64data = reader.result;
         
-        // Image Compression to prevent lag in PDF
         const img = new Image();
         img.src = base64data;
         img.onload = async () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          const maxWidth = 400; // Low resolution for PDF efficiency
+          const maxWidth = 400; 
           const scale = maxWidth / img.width;
           canvas.width = maxWidth;
           canvas.height = img.height * scale;
@@ -103,13 +102,14 @@ export default function FinalTenColumnRegister() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, index) => index !== photoIndex) } : r));
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     try {
       const doc = new jsPDF('l', 'mm', 'a4');
+      
       autoTable(doc, {
         body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
         theme: 'grid',
-        styles: { fontSize: 12, fontStyle: 'bold', halign: 'left', fillColor: [211, 211, 211], lineWidth: 0.5, lineColor: [0, 0, 0] }
+        styles: { fontSize: 10, fontStyle: 'bold', halign: 'left', fillColor: [211, 211, 211] }
       });
 
       const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
@@ -127,7 +127,7 @@ export default function FinalTenColumnRegister() {
         head: head,
         body: body,
         theme: 'grid',
-        styles: { fontSize: 5, halign: 'center', valign: 'middle', minCellHeight: 20, overflow: 'linebreak' },
+        styles: { fontSize: 4.5, halign: 'center', valign: 'middle', minCellHeight: 18, overflow: 'linebreak' },
         headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255] },
         didDrawCell: (data) => {
           if (data.section === 'head') return;
@@ -139,20 +139,35 @@ export default function FinalTenColumnRegister() {
 
           const drawImg = (imgObj, cell) => {
             if (imgObj && imgObj.preview) {
-              doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1);
+              try {
+                // OPTIMIZATION: Added compression and 'FAST' rendering to prevent memory spike
+                doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1, undefined, 'FAST');
+              } catch (err) {
+                console.error("Image Draw Error", err);
+              }
             }
           };
 
           const photoStart = 6;
           if (data.column.index >= photoStart && data.column.index < photoStart + maxBefore) {
-            drawImg(rowData.before[data.column.index - photoStart], data.cell);
+            const beforeIdx = data.column.index - photoStart;
+            if (rowData.before[beforeIdx]) drawImg(rowData.before[beforeIdx], data.cell);
           }
           if (data.column.index >= photoStart + maxBefore && data.column.index < photoStart + maxBefore + maxAfter) {
-            drawImg(rowData.after[data.column.index - (photoStart + maxBefore)], data.cell);
+            const afterIdx = data.column.index - (photoStart + maxBefore);
+            if (rowData.after[afterIdx]) drawImg(rowData.after[afterIdx], data.cell);
           }
         }
       });
+
+      const pdfBlob = doc.output('blob');
+      if (pdfBlob.size > 150 * 1024 * 1024) { 
+         alert("Warning: PDF size romba perusu. Mobile-la sync option use pannunga.");
+      }
+      
       doc.save(`${project}_Final_Report.pdf`);
+      // MEMORY MANAGEMENT: Clear memory after download
+      URL.revokeObjectURL(pdfBlob);
     } catch (e) {
       alert("PDF Error: Image size romba adhigama irukku. Rows split panni try pannunga.");
     }
