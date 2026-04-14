@@ -20,19 +20,32 @@ export default function ProfessionalSiteRegister() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  // AUTOMATIC SCRIPT LOADING LOGIC
   useEffect(() => {
+    const script = document.createElement('script');
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
     localStorage.setItem('site_v21_google', JSON.stringify(rows));
+    
+    return () => {
+      document.body.removeChild(script);
+    };
   }, [rows]);
 
   const handleLogin = () => {
-    if (!window.google) return alert("Google Script innum load aagala. Refresh pannunga!");
+    if (!window.google || !window.google.accounts) {
+      return alert("Google Script innum ready aagala. Oru 2 seconds wait panni thirumba try pannunga!");
+    }
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: (response) => {
         if (response.access_token) {
           setAccessToken(response.access_token);
-          alert("Google Connected Successfully!");
+          alert("Google Connected!");
         }
       },
     });
@@ -81,7 +94,6 @@ export default function ProfessionalSiteRegister() {
     }
   };
 
-  // PDF Generation with memory-safe approach
   const generatePDF = () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     autoTable(doc, {
@@ -143,7 +155,7 @@ export default function ProfessionalSiteRegister() {
         {!accessToken ? (
           <button onClick={handleLogin} style={ui.authBtn}>G+ Login with Google</button>
         ) : (
-          <div style={{color:'#92d050', fontSize:'12px', textAlign:'center'}}>✓ Google Connected</div>
+          <div style={{color:'#92d050', fontSize:'14px', fontWeight:'bold', textAlign:'center'}}>✓ Google Connected</div>
         )}
         <input value={project} onChange={e => setProject(e.target.value)} style={ui.headIn} />
       </header>
@@ -204,29 +216,29 @@ export default function ProfessionalSiteRegister() {
 }
 
 const ui = {
-  container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '120px', fontFamily: 'Arial' },
+  container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '130px', fontFamily: 'Arial' },
   nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' },
-  authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '10px', borderRadius: '4px', fontWeight: 'bold' },
+  authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '10px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' },
   headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
   main: { padding: '12px' },
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
   snoBadge: { fontSize: '14px', fontWeight: 'bold' },
-  rowDelBtn: { background: 'none', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px' },
-  badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center' },
+  rowDelBtn: { background: 'none', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' },
+  badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', cursor: 'pointer' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
   area: { width: '100%', height: '65px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box', marginBottom: '10px' },
   photoGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' },
-  upBtn: { background: '#f8f9fa', padding: '10px', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '11px' },
+  upBtn: { background: '#f8f9fa', padding: '10px', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '11px', cursor: 'pointer' },
   uploadSection: { display: 'flex', flexDirection: 'column', gap: '5px' },
   thumbnailRow: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
   thumbWrap: { position: 'relative', width: '40px', height: '40px' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
-  delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px' },
-  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '8px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box', flexWrap: 'wrap' },
-  btnGreen: { flex: 1, padding: '12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', minWidth: '80px' },
-  btnBlue: { flex: 1, padding: '12px', background: '#4285F4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', minWidth: '80px' },
-  btnGray: { flex: 1, padding: '12px', background: '#6c757d', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', minWidth: '80px' },
-  btnRed: { padding: '12px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
+  delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', cursor: 'pointer' },
+  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '8px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box', flexWrap: 'wrap', zIndex: 100 },
+  btnGreen: { flex: 1, padding: '12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', minWidth: '80px', cursor: 'pointer' },
+  btnBlue: { flex: 1, padding: '12px', background: '#4285F4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', minWidth: '80px', cursor: 'pointer' },
+  btnGray: { flex: 1, padding: '12px', background: '#6c757d', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', minWidth: '80px', cursor: 'pointer' },
+  btnRed: { padding: '12px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }
 };
