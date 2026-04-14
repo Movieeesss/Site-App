@@ -1,65 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
-export default function FinalTenColumnRegister() {
+// UNGA CREDENTIALS
+const CLIENT_ID = "683400126186-pe90l8vv3f3gdj0cg9i359tqjhkf6aca.apps.googleusercontent.com";
+const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets";
+
+export default function ProfessionalSiteRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   const [rows, setRows] = useState(() => {
-    const saved = localStorage.getItem('site_v20_final');
+    const saved = localStorage.getItem('site_v21_google');
     return saved ? JSON.parse(saved) : [{ 
-      id: 1, date: '2026-04-13', desc: '', loggedBy: '', 
+      id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', 
       status: 'Open', closedDate: '', before: [], after: [], 
-      owner: '', closedBy: '', remarks: '' 
+      owner: '', remarks: '' 
     }];
   });
 
+  const [accessToken, setAccessToken] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const CLOUD_NAME = "ddkgr27ds"; 
-  const UPLOAD_PRESET = "ml_default"; 
 
   useEffect(() => {
-    localStorage.setItem('site_v20_final', JSON.stringify(rows));
+    localStorage.setItem('site_v21_google', JSON.stringify(rows));
   }, [rows]);
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "";
-    const [year, month, day] = dateStr.split("-");
-    return `${day}-${month}-${year}`;
+  // 1. GOOGLE LOGIN (OAuth2)
+  const handleLogin = () => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: (response) => {
+        if (response.access_token) {
+          setAccessToken(response.access_token);
+          alert("Google Connect aagidichu!");
+        }
+      },
+    });
+    client.requestAccessToken();
   };
 
-  const addRow = () => {
-    // S.No logic updated to be sequential based on array length
-    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
-    setRows([...rows, { id: newId, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
-  };
-
-  // NEW: Delete specific row function
-  const deleteRow = (id) => {
-    if (window.confirm("Indha row-ah delete panna poringala?")) {
-      const updatedRows = rows.filter(row => row.id !== id);
-      // Optional: S.No-ah refresh panna idhai use pannalam, illena id apdiye irukkum
-      setRows(updatedRows);
-    }
-  };
-
-  const clearAll = () => {
-    if (window.confirm("Ella data-vum delete aagidum. Sure-ah?")) {
-      setRows([{ id: 1, date: '2026-04-13', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]);
-      localStorage.removeItem('site_v20_final');
-    }
-  };
-
-  const uploadPhoto = async (id, type, files) => {
+  // 2. UPLOAD PHOTO TO GOOGLE DRIVE
+  const uploadPhoto = async (rowId, type, files) => {
+    if (!accessToken) return alert("Modhala Login with Google pannunga!");
     setIsUploading(true);
+
     for (const file of Array.from(files)) {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", UPLOAD_PRESET);
+      const metadata = {
+        name: `${project}_${type}_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg'
+      };
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+
       try {
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          body: form
+        });
         const data = await res.json();
-        setRows(prev => prev.map(r => r.id === id ? { ...r, [type]: [...r[type], data.secure_url] } : r));
-      } catch (e) { console.error("Upload error"); }
+        setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: [...r[type], data.webViewLink] } : r));
+      } catch (e) { console.error("Drive upload error", e); }
     }
     setIsUploading(false);
   };
@@ -68,94 +70,88 @@ export default function FinalTenColumnRegister() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, index) => index !== photoIndex) } : r));
   };
 
-  const generatePDF = () => {
-    const doc = new jsPDF('l', 'mm', 'a4');
-    
-    autoTable(doc, {
-      body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
-      theme: 'grid',
-      styles: { fontSize: 12, fontStyle: 'bold', halign: 'left', cellPadding: 3, fillColor: [211, 211, 211], lineWidth: 0.5, lineColor: [0, 0, 0] },
-      columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 177 } }
-    });
+  const addRow = () => {
+    setRows([...rows, { 
+      id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', 
+      status: 'Open', closedDate: '', before: [], after: [], 
+      owner: '', remarks: '' 
+    }]);
+  };
 
-    const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
-    const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
+  const deleteRow = (id) => {
+    if (window.confirm("Indha row-ah delete panna poringala?")) {
+      setRows(rows.filter(r => r.id !== id));
+    }
+  };
 
-    const beforeHeaders = Array.from({ length: maxBefore }, (_, i) => `P${i + 1}(B)`);
-    const afterHeaders = Array.from({ length: maxAfter }, (_, i) => `P${i + 1}(A)`);
+  // 3. SAVE EVERYTHING TO GOOGLE SHEETS (No Lag for 100+ rows)
+  const saveToSheets = async () => {
+    if (!accessToken) return alert("Login with Google First!");
+    setIsSyncing(true);
 
-    const head = [[
-      'S.No', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
-      ...beforeHeaders, 
-      ...afterHeaders, 
-      'Owner', 'Remarks'
-    ]];
+    try {
+      // Step A: Create Spreadsheet
+      const sheetRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ properties: { title: `${project}_Report_${new Date().toLocaleDateString()}` } })
+      });
+      const sheetData = await sheetRes.json();
+      const spreadsheetId = sheetData.spreadsheetId;
 
-    const body = rows.map((r, index) => [
-      index + 1, // PDF-la S.No correct-ah varum
-      formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
-      ...Array(maxBefore + maxAfter).fill(''), 
-      r.owner, r.remarks.toUpperCase()
-    ]);
+      // Step B: Prepare Data (Rows to Columns)
+      const values = [
+        ["S.No", "Date", "Description", "Logged By", "Status", "Owner", "Remarks", "Before Photos", "After Photos"],
+        ...rows.map((r, i) => [
+          i + 1, r.date, r.desc, r.loggedBy, r.status, r.owner, r.remarks, 
+          r.before.join(", "), r.after.join(", ")
+        ])
+      ];
 
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY,
-      head: head,
-      body: body,
-      theme: 'grid',
-      styles: { fontSize: 6, halign: 'center', valign: 'middle', minCellHeight: 25, lineWidth: 0.1, lineColor: [0, 0, 0] },
-      headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255], fontStyle: 'bold' },
-      
-      didDrawCell: (data) => {
-        if (data.section === 'head') return;
-        const rowData = rows[data.row.index];
+      // Step C: Push Data
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values })
+      });
 
-        if (data.column.index === 4) {
-          if (rowData.status.toUpperCase() === 'OPEN') data.cell.styles.fillColor = [255, 0, 0];
-          if (rowData.status.toUpperCase() === 'DONE') data.cell.styles.fillColor = [146, 208, 80];
-        }
-
-        const drawImg = (url, cell) => {
-          if (url) doc.addImage(url, 'JPEG', cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
-        };
-
-        if (data.column.index >= 6 && data.column.index < 6 + maxBefore) {
-          const imgIdx = data.column.index - 6;
-          drawImg(rowData.before[imgIdx], data.cell);
-        }
-        if (data.column.index >= 6 + maxBefore && data.column.index < 6 + maxBefore + maxAfter) {
-          const imgIdx = data.column.index - (6 + maxBefore);
-          drawImg(rowData.after[imgIdx], data.cell);
-        }
-      }
-    });
-
-    doc.save(`${project}_Final_Report.pdf`);
+      alert("Success! Google Sheet-la save aagidichu. Link: https://docs.google.com/spreadsheets/d/" + spreadsheetId);
+      window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}`, '_blank');
+    } catch (e) { alert("Sync Error!"); }
+    setIsSyncing(false);
   };
 
   return (
     <div style={ui.container}>
-      <header style={ui.nav}><input value={project} onChange={e => setProject(e.target.value)} style={ui.headIn} /></header>
+      <header style={ui.nav}>
+        {!accessToken ? (
+          <button onClick={handleLogin} style={ui.authBtn}>G+ Login with Google</button>
+        ) : (
+          <div style={{color:'#92d050', fontSize:'12px', textAlign:'center'}}>✓ Google Connected</div>
+        )}
+        <input value={project} onChange={e => setProject(e.target.value)} style={ui.headIn} />
+      </header>
+
       <div style={ui.main}>
         {rows.map((row, index) => (
           <div key={row.id} style={ui.card}>
             <div style={ui.topRow}>
-              {/* S.No text-ah control panna mudiyadha padi normal span-ah mathiyachu */}
               <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
                 <span style={ui.snoBadge}>S.No: {index + 1}</span>
                 <button onClick={() => deleteRow(row.id)} style={ui.rowDelBtn}>Delete</button>
               </div>
-              <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
+              <input 
+                style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} 
+                value={row.status} 
+                onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} 
+              />
             </div>
+            
             <div style={ui.inputGrid}>
               <input type="date" style={ui.field} value={row.date} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, date: e.target.value}:r))} />
               <input placeholder="Logged By" style={ui.field} value={row.loggedBy} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, loggedBy: e.target.value}:r))} />
             </div>
             <textarea placeholder="Description" style={ui.area} value={row.desc} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, desc: e.target.value}:r))} />
-            <div style={ui.inputGrid}>
-               <div style={{fontSize:'10px'}}>Closed Date: <input type="date" style={ui.field} value={row.closedDate} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedDate: e.target.value}:r))} /></div>
-               <input placeholder="Owner" style={ui.field} value={row.owner} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, owner: e.target.value}:r))} />
-            </div>
             
             <div style={ui.photoGrid}>
               <div style={ui.uploadSection}>
@@ -180,10 +176,12 @@ export default function FinalTenColumnRegister() {
           </div>
         ))}
       </div>
+
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>{isUploading ? 'Uploading...' : 'GET PDF'}</button>
-        <button onClick={clearAll} style={ui.btnRed}>CLEAR ALL</button>
+        <button onClick={saveToSheets} disabled={isSyncing || isUploading} style={ui.btnBlue}>
+          {isSyncing ? 'Syncing...' : 'SAVE TO SHEETS'}
+        </button>
       </div>
     </div>
   );
@@ -191,26 +189,26 @@ export default function FinalTenColumnRegister() {
 
 const ui = {
   container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '110px', fontFamily: 'Arial' },
-  nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10 },
+  nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' },
+  authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '10px', borderRadius: '4px', fontWeight: 'bold' },
   headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
   main: { padding: '12px' },
-  card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e0e6ed' },
+  card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
-  badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
-  snoBadge: { fontSize: '14px', fontWeight: 'bold', color: '#333' },
-  rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' },
+  snoBadge: { fontSize: '14px', fontWeight: 'bold' },
+  rowDelBtn: { background: 'none', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px' },
+  badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
   area: { width: '100%', height: '65px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box', marginBottom: '10px' },
   photoGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' },
-  upBtn: { background: '#f8f9fa', padding: '12px', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '12px', cursor: 'pointer', display: 'block' },
+  upBtn: { background: '#f8f9fa', padding: '10px', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '11px' },
   uploadSection: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  thumbnailRow: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' },
+  thumbnailRow: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
   thumbWrap: { position: 'relative', width: '40px', height: '40px' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
-  delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px' },
   footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '10px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box' },
   btnGreen: { flex: 1, padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnBlue: { flex: 1, padding: '15px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnRed: { padding: '15px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
+  btnBlue: { flex: 1, padding: '15px', background: '#4285F4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
 };
