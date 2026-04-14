@@ -7,8 +7,11 @@ const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapi
 
 export default function FinalTenColumnRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
-  const [accessToken, setAccessToken] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Persistence for Login (Reload pannaalum disconnect aagaadhu)
+  const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('drive_token'));
+  
   const [rows, setRows] = useState(() => {
     const saved = localStorage.getItem('site_v20_final');
     return saved ? JSON.parse(saved) : [{ 
@@ -24,19 +27,33 @@ export default function FinalTenColumnRegister() {
     script.async = true; script.defer = true;
     document.body.appendChild(script);
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
+    
+    // Refresh pannaalum disconnect aagama irukka token-ah save pannuvom
+    if (accessToken) sessionStorage.setItem('drive_token', accessToken);
+    
     return () => { if(document.body.contains(script)) document.body.removeChild(script); };
-  }, [rows]);
+  }, [rows, accessToken]);
 
   const handleLogin = () => {
     if (!window.google) return alert("Google Script ready aagala. Refresh!");
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPES,
-      callback: (res) => { if (res.access_token) setAccessToken(res.access_token); },
+      callback: (res) => { 
+        if (res.access_token) {
+          setAccessToken(res.access_token);
+          sessionStorage.setItem('drive_token', res.access_token);
+        }
+      },
     });
     client.requestAccessToken();
   };
 
-  const handleDisconnect = () => { setAccessToken(null); alert("Disconnected!"); };
+  const handleDisconnect = () => { 
+    setAccessToken(null); 
+    sessionStorage.removeItem('drive_token');
+    alert("Disconnected!"); 
+  };
+
   const formatDate = (d) => d ? d.split("-").reverse().join("-") : "";
 
   const uploadPhoto = async (id, type, files) => {
@@ -79,10 +96,9 @@ export default function FinalTenColumnRegister() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, i) => i !== idx) } : r));
   };
 
-  // OPTIMIZED SPLIT PDF LOGIC (5 ROWS PER BATCH)
   const generatePDF = async () => {
     if (rows.length === 0) return;
-    const batchSize = 5; // Memory safe size
+    const batchSize = 5; 
     const totalBatches = Math.ceil(rows.length / batchSize);
     
     alert(`Total ${totalBatches} PDF files download aagum. Oru nimisham wait pannunga!`);
@@ -141,7 +157,6 @@ export default function FinalTenColumnRegister() {
       });
 
       doc.save(`${project}_Part_${i+1}.pdf`);
-      // Short delay between downloads to help browser memory
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   };
@@ -152,7 +167,7 @@ export default function FinalTenColumnRegister() {
   };
 
   const deleteRow = (id) => { if (window.confirm("Delete?")) setRows(rows.filter(r => r.id !== id)); };
-  const clearAll = () => { if (window.confirm("Clear All?")) { setRows([{ id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', remarks: '' }]); localStorage.removeItem('site_v20_final'); } };
+  const clearAll = () => { if (window.confirm("Clear All?")) { setRows([{ id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', closedBy: '', remarks: '' }]); localStorage.removeItem('site_v20_final'); } };
 
   return (
     <div style={ui.container}>
@@ -212,7 +227,7 @@ const ui = {
   main: { padding: '12px' },
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
-  snoBadge: { fontSize: '14px', fontWeight: 'bold' },
+  snoBadge: { fontSize: '14px', fontWeight: 'bold', color: '#333' },
   rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px' },
   badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
