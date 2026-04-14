@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const CLIENT_ID = "683400126186-pe90l8vv3f3gdj0cg9i359tqjhkf6aca.apps.googleusercontent.com";
+// UPDATED WITH YOUR NEW KEYS
+const CLIENT_ID = "683400126186-f3a9u3fbe6l50bv1vidci7oinq7socn6.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets";
 
 export default function ProfessionalSiteRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   const [rows, setRows] = useState(() => {
-    const saved = localStorage.getItem('site_v21_google');
+    const saved = localStorage.getItem('site_v22_final');
     return saved ? JSON.parse(saved) : [{ 
       id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', 
       status: 'Open', closedDate: '', before: [], after: [], 
@@ -20,32 +21,26 @@ export default function ProfessionalSiteRegister() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // AUTOMATIC SCRIPT LOADING LOGIC
+  // Auto-load Google Script
   useEffect(() => {
     const script = document.createElement('script');
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
     document.body.appendChild(script);
-
-    localStorage.setItem('site_v21_google', JSON.stringify(rows));
-    
-    return () => {
-      document.body.removeChild(script);
-    };
+    localStorage.setItem('site_v22_final', JSON.stringify(rows));
+    return () => { if(document.body.contains(script)) document.body.removeChild(script); };
   }, [rows]);
 
   const handleLogin = () => {
-    if (!window.google || !window.google.accounts) {
-      return alert("Google Script innum ready aagala. Oru 2 seconds wait panni thirumba try pannunga!");
-    }
+    if (!window.google) return alert("Google Script load aagala. 2 sec wait panni try pannunga!");
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: (response) => {
         if (response.access_token) {
           setAccessToken(response.access_token);
-          alert("Google Connected!");
+          alert("Google Connected Successfully!");
         }
       },
     });
@@ -68,7 +63,7 @@ export default function ProfessionalSiteRegister() {
         });
         const data = await res.json();
         setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: [...r[type], data.webViewLink] } : r));
-      } catch (e) { console.error("Drive error", e); }
+      } catch (e) { console.error("Upload error", e); }
     }
     setIsUploading(false);
   };
@@ -90,7 +85,7 @@ export default function ProfessionalSiteRegister() {
   const clearAll = () => {
     if (window.confirm("Ella data-vum delete aagidum. Sure-ah?")) {
       setRows([{ id: Date.now(), date: '2026-04-14', desc: '', loggedBy: '', status: 'Open', closedDate: '', before: [], after: [], owner: '', remarks: '' }]);
-      localStorage.removeItem('site_v21_google');
+      localStorage.removeItem('site_v22_final');
     }
   };
 
@@ -103,17 +98,15 @@ export default function ProfessionalSiteRegister() {
       columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 177 } }
     });
 
-    const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
-    const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
-    const head = [['S.No', 'Date', 'Description', 'Logged by', 'Status', ...Array(maxBefore).fill('Before'), ...Array(maxAfter).fill('After'), 'Remarks']];
-    const body = rows.map((r, i) => [i + 1, r.date, r.desc, r.loggedBy, r.status, ...Array(maxBefore + maxAfter).fill(''), r.remarks]);
+    const head = [['S.No', 'Date', 'Description', 'Logged by', 'Status', 'Remarks']];
+    const body = rows.map((r, i) => [i + 1, r.date, r.desc, r.loggedBy, r.status, r.remarks]);
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY,
       head: head,
       body: body,
       theme: 'grid',
-      styles: { fontSize: 7, halign: 'center', valign: 'middle', minCellHeight: 20 },
+      styles: { fontSize: 8, halign: 'center' },
       didDrawCell: (data) => {
         if (data.section === 'body' && data.column.index === 4) {
           data.cell.styles.fillColor = rows[data.row.index].status.toUpperCase() === 'OPEN' ? [255, 0, 0] : [146, 208, 80];
@@ -143,7 +136,7 @@ export default function ProfessionalSiteRegister() {
         headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values })
       });
-      alert("Saved to Google Sheet!");
+      alert("Successfully Saved to Google Sheets!");
       window.open(`https://docs.google.com/spreadsheets/d/${spreadsheetId}`, '_blank');
     } catch (e) { alert("Sync Error!"); }
     setIsSyncing(false);
@@ -186,7 +179,7 @@ export default function ProfessionalSiteRegister() {
                 <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
                 <div style={ui.thumbnailRow}>
                   {row.before.map((url, idx) => (
-                    <div key={idx} style={ui.thumbWrap}><img src={url} style={ui.thumbImg} alt="before"/><button onClick={() => deletePhoto(row.id, 'before', idx)} style={ui.delBtn}>×</button></div>
+                    <div key={idx} style={ui.thumbWrap}><img src={url} style={ui.thumbImg} alt="b"/><button onClick={() => deletePhoto(row.id, 'before', idx)} style={ui.delBtn}>×</button></div>
                   ))}
                 </div>
               </div>
@@ -194,7 +187,7 @@ export default function ProfessionalSiteRegister() {
                 <label style={ui.upBtn}>📸 After ({row.after.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'after', e.target.files)} /></label>
                 <div style={ui.thumbnailRow}>
                   {row.after.map((url, idx) => (
-                    <div key={idx} style={ui.thumbWrap}><img src={url} style={ui.thumbImg} alt="after"/><button onClick={() => deletePhoto(row.id, 'after', idx)} style={ui.delBtn}>×</button></div>
+                    <div key={idx} style={ui.thumbWrap}><img src={url} style={ui.thumbImg} alt="a"/><button onClick={() => deletePhoto(row.id, 'after', idx)} style={ui.delBtn}>×</button></div>
                   ))}
                 </div>
               </div>
@@ -216,7 +209,7 @@ export default function ProfessionalSiteRegister() {
 }
 
 const ui = {
-  container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '130px', fontFamily: 'Arial' },
+  container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '140px', fontFamily: 'Arial' },
   nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' },
   authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '10px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' },
   headIn: { width: '100%', background: 'transparent', border: '1px solid #fff', borderRadius: '4px', color: '#fff', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' },
@@ -225,7 +218,7 @@ const ui = {
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
   snoBadge: { fontSize: '14px', fontWeight: 'bold' },
   rowDelBtn: { background: 'none', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' },
-  badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', cursor: 'pointer' },
+  badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
   area: { width: '100%', height: '65px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box', marginBottom: '10px' },
