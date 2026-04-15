@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import ExcelJS from 'exceljs'; // External library for images in excel
 
 const CLIENT_ID = "683400126186-f3a9u3fbe6l50bv1vidci7oinq7socn6.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets";
@@ -20,25 +21,13 @@ export default function FinalTenColumnRegister() {
   });
 
   useEffect(() => {
-    // Load Google GSI script
-    const gsiScript = document.createElement('script');
-    gsiScript.src = "https://accounts.google.com/gsi/client";
-    gsiScript.async = true; gsiScript.defer = true;
-    document.body.appendChild(gsiScript);
-
-    // ✅ NEW: Load SheetJS (xlsx) for Excel export
-    const xlsxScript = document.createElement('script');
-    xlsxScript.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    xlsxScript.async = true;
-    document.body.appendChild(xlsxScript);
-
+    const script = document.createElement('script');
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true; script.defer = true;
+    document.body.appendChild(script);
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
     if (accessToken) sessionStorage.setItem('drive_token', accessToken);
-
-    return () => {
-      if (document.body.contains(gsiScript)) document.body.removeChild(gsiScript);
-      if (document.body.contains(xlsxScript)) document.body.removeChild(xlsxScript);
-    };
+    return () => { if(document.body.contains(script)) document.body.removeChild(script); };
   }, [rows, accessToken]);
 
   const handleLogin = () => {
@@ -55,12 +44,7 @@ export default function FinalTenColumnRegister() {
     client.requestAccessToken();
   };
 
-  const handleDisconnect = () => { 
-    setAccessToken(null); 
-    sessionStorage.removeItem('drive_token');
-    alert("Disconnected!"); 
-  };
-
+  const handleDisconnect = () => { setAccessToken(null); sessionStorage.removeItem('drive_token'); alert("Disconnected!"); };
   const formatDate = (d) => d ? d.split("-").reverse().join("-") : "";
 
   const uploadPhoto = async (id, type, files) => {
@@ -75,11 +59,11 @@ export default function FinalTenColumnRegister() {
         img.onload = async () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          const maxWidth = 400;
+          const maxWidth = 300; // Compressed for Excel stability
           const scale = maxWidth / img.width;
           canvas.width = maxWidth; canvas.height = img.height * scale;
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.7);
+          const compressed = canvas.toDataURL('image/jpeg', 0.6);
 
           const metadata = { name: `${project}_${type}_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
           const form = new FormData();
@@ -103,116 +87,113 @@ export default function FinalTenColumnRegister() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, i) => i !== idx) } : r));
   };
 
-  // ✅ NEW: Excel Export Function
-  const generateExcel = () => {
-    if (!window.XLSX) return alert("Excel library load aagala. Oru nimisham wait pannunga!");
-    if (rows.length === 0) return alert("Data illai!");
+  // ✅ NEW: ADVANCED EXCEL EXPORT WITH IMAGES
+  const generateExcel = async () => {
+    if (rows.length === 0) return alert("No data!");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Action Register');
 
-    const headers = [
-      'Slno', 'Date Logged', 'Description', 'Logged By',
-      'Current Status', 'Actual Closed Date',
-      'Before Photos (Count)', 'After Photos (Count)',
-      'Owner', 'Closed By', 'Remarks'
+    // Setup Columns
+    worksheet.columns = [
+      { header: 'Slno', key: 'slno', width: 8 },
+      { header: 'Date Logged', key: 'date', width: 15 },
+      { header: 'Description', key: 'desc', width: 40 },
+      { header: 'Logged By', key: 'loggedBy', width: 15 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Actual Closed Date', key: 'closedDate', width: 18 },
+      { header: 'Photo (Before)', key: 'photoB', width: 25 },
+      { header: 'Photo (After)', key: 'photoA', width: 25 },
+      { header: 'Owner', key: 'owner', width: 15 },
+      { header: 'Closed By', key: 'closedBy', width: 15 },
+      { header: 'Remarks', key: 'remarks', width: 30 },
     ];
 
-    const data = rows.map((r, index) => [
-      index + 1,
-      formatDate(r.date),
-      r.desc,
-      r.loggedBy,
-      r.status.toUpperCase(),
-      formatDate(r.closedDate),
-      r.before.length,
-      r.after.length,
-      r.owner,
-      r.closedBy,
-      r.remarks.toUpperCase()
-    ]);
+    // Style Header
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '282C34' } };
 
-    const wsData = [headers, ...data];
-    const ws = window.XLSX.utils.aoa_to_sheet(wsData);
+    for (const [idx, r] of rows.entries()) {
+      const rowIndex = idx + 2;
+      const row = worksheet.addRow({
+        slno: idx + 1,
+        date: formatDate(r.date),
+        desc: r.desc,
+        loggedBy: r.loggedBy,
+        status: r.status.toUpperCase(),
+        closedDate: formatDate(r.closedDate),
+        owner: r.owner,
+        closedBy: r.closedBy,
+        remarks: r.remarks.toUpperCase(),
+      });
 
-    // Column widths
-    ws['!cols'] = [
-      { wch: 6 },   // Slno
-      { wch: 14 },  // Date Logged
-      { wch: 35 },  // Description
-      { wch: 15 },  // Logged By
-      { wch: 14 },  // Status
-      { wch: 18 },  // Closed Date
-      { wch: 18 },  // Before count
-      { wch: 17 },  // After count
-      { wch: 15 },  // Owner
-      { wch: 14 },  // Closed By
-      { wch: 25 },  // Remarks
-    ];
+      // Set Row Height for images
+      worksheet.getRow(rowIndex).height = 80;
+      worksheet.getRow(rowIndex).alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-    const wb = window.XLSX.utils.book_new();
-    window.XLSX.utils.book_append_sheet(wb, ws, 'Action Register');
-    window.XLSX.writeFile(wb, `${project}_ActionRegister.xlsx`);
+      // Status Background Color
+      const statusCell = worksheet.getCell(`E${rowIndex}`);
+      statusCell.fill = {
+        type: 'pattern', pattern: 'solid',
+        fgColor: { argb: r.status.toUpperCase() === 'OPEN' ? 'FFFF0000' : 'FF92D050' }
+      };
+
+      // Add "Before" Image (First one only to keep excel stable)
+      if (r.before.length > 0) {
+        const imgId = workbook.addImage({ base64: r.before[0].preview, extension: 'jpeg' });
+        worksheet.addImage(imgId, { tl: { col: 6, row: idx + 1 }, ext: { width: 100, height: 100 } });
+      }
+
+      // Add "After" Image
+      if (r.after.length > 0) {
+        const imgId = workbook.addImage({ base64: r.after[0].preview, extension: 'jpeg' });
+        worksheet.addImage(imgId, { tl: { col: 7, row: idx + 1 }, ext: { width: 100, height: 100 } });
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${project}_Detailed.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const generatePDF = async () => {
     if (rows.length === 0) return;
     const batchSize = 5; 
     const totalBatches = Math.ceil(rows.length / batchSize);
-    alert(`Total ${totalBatches} PDF files download aagum. Oru nimisham wait pannunga!`);
+    alert(`Total ${totalBatches} PDF download aagum...`);
 
     for (let i = 0; i < totalBatches; i++) {
       const start = i * batchSize;
       const batchRows = rows.slice(start, start + batchSize);
       const doc = new jsPDF('l', 'mm', 'a4');
-      
       autoTable(doc, {
         body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
         theme: 'grid',
         styles: { fontSize: 10, fontStyle: 'bold', halign: 'left', fillColor: [211, 211, 211] }
       });
-
       const maxBefore = Math.max(...batchRows.map(r => r.before.length), 1);
       const maxAfter = Math.max(...batchRows.map(r => r.after.length), 1);
-      
-      const head = [[
-        'Slno', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
-        ...Array.from({ length: maxBefore }, (_, idx) => `P${idx+1}(B)`), 
-        ...Array.from({ length: maxAfter }, (_, idx) => `P${idx+1}(A)`), 
-        'Owner', 'Closed By', 'Remarks'
-      ]];
-
-      const body = batchRows.map((r, idx) => [
-        start + idx + 1, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
-        ...Array(maxBefore + maxAfter).fill(''), 
-        r.owner, r.closedBy, r.remarks.toUpperCase()
-      ]);
-
+      const head = [['Slno', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', ...Array.from({ length: maxBefore }, (_, idx) => `P${idx+1}(B)`), ...Array.from({ length: maxAfter }, (_, idx) => `P${idx+1}(A)`), 'Owner', 'Closed By', 'Remarks']];
+      const body = batchRows.map((r, idx) => [start + idx + 1, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate), ...Array(maxBefore + maxAfter).fill(''), r.owner, r.closedBy, r.remarks.toUpperCase()]);
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY, head: head, body: body, theme: 'grid',
         styles: { fontSize: 4.5, halign: 'center', valign: 'middle', minCellHeight: 18 },
-        headStyles: { fillColor: [40, 44, 52], textColor: [255, 255, 255] },
         didDrawCell: (data) => {
           if (data.section === 'head') return;
           const rowData = batchRows[data.row.index];
-          if (data.column.index === 4) {
-            data.cell.styles.fillColor = rowData.status.toUpperCase() === 'OPEN' ? [255, 0, 0] : [146, 208, 80];
-          }
-          const drawImg = (imgObj, cell) => {
-            if (imgObj && imgObj.preview) {
-              try { doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1, undefined, 'FAST'); }
-              catch (err) { console.error(err); }
-            }
-          };
+          if (data.column.index === 4) data.cell.styles.fillColor = rowData.status.toUpperCase() === 'OPEN' ? [255, 0, 0] : [146, 208, 80];
+          const drawImg = (imgObj, cell) => { if (imgObj?.preview) doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1); };
           const photoStart = 6;
-          if (data.column.index >= photoStart && data.column.index < photoStart + maxBefore) {
-            drawImg(rowData.before[data.column.index - photoStart], data.cell);
-          }
-          if (data.column.index >= photoStart + maxBefore && data.column.index < photoStart + maxBefore + maxAfter) {
-            drawImg(rowData.after[data.column.index - (photoStart + maxBefore)], data.cell);
-          }
+          if (data.column.index >= photoStart && data.column.index < photoStart + maxBefore) drawImg(rowData.before[data.column.index - photoStart], data.cell);
+          if (data.column.index >= photoStart + maxBefore && data.column.index < photoStart + maxBefore + maxAfter) drawImg(rowData.after[data.column.index - (photoStart + maxBefore)], data.cell);
         }
       });
-
       doc.save(`${project}_Part_${i+1}.pdf`);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(r => setTimeout(r, 500));
     }
   };
 
@@ -233,44 +214,33 @@ export default function FinalTenColumnRegister() {
       <div style={ui.main}>
         {rows.map((row, index) => (
           <div key={row.id} style={ui.card}>
-            <div style={ui.topRow}>
-              <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                <span style={ui.snoBadge}>Slno: {index + 1}</span>
-                <button onClick={() => deleteRow(row.id)} style={ui.rowDelBtn}>Delete</button>
-              </div>
-              <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
-            </div>
+            <div style={ui.topRow}><span style={ui.snoBadge}>Slno: {index + 1}</span><input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} /></div>
             <div style={ui.inputGrid}>
               <input type="date" style={ui.field} value={row.date} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, date: e.target.value}:r))} />
               <input placeholder="Logged By" style={ui.field} value={row.loggedBy} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, loggedBy: e.target.value}:r))} />
             </div>
             <textarea placeholder="Description" style={ui.area} value={row.desc} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, desc: e.target.value}:r))} />
             <div style={ui.inputGrid}>
-               <div style={{fontSize:'10px'}}>Actual Closed Date: <input type="date" style={ui.field} value={row.closedDate} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedDate: e.target.value}:r))} /></div>
-               <input placeholder="Owner" style={ui.field} value={row.owner} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, owner: e.target.value}:r))} />
+              <div style={{fontSize:'10px'}}>Actual Closed Date: <input type="date" style={ui.field} value={row.closedDate} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedDate: e.target.value}:r))} /></div>
+              <input placeholder="Owner" style={ui.field} value={row.owner} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, owner: e.target.value}:r))} />
             </div>
-            <input placeholder="Closed By" style={{...ui.field, marginBottom:'10px'}} value={row.closedBy} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, closedBy: e.target.value}:r))} />
             <div style={ui.photoGrid}>
-              <div style={ui.uploadSection}>
-                <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
-                <div style={ui.thumbnailRow}>{row.before.map((img, idx) => (<div key={idx} style={ui.thumbWrap}><img src={img.preview} style={ui.thumbImg} /><button onClick={() => deletePhoto(row.id, 'before', idx)} style={ui.delBtn}>×</button></div>))}</div>
-              </div>
-              <div style={ui.uploadSection}>
-                <label style={ui.upBtn}>📸 After ({row.after.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'after', e.target.files)} /></label>
-                <div style={ui.thumbnailRow}>{row.after.map((img, idx) => (<div key={idx} style={ui.thumbWrap}><img src={img.preview} style={ui.thumbImg} /><button onClick={() => deletePhoto(row.id, 'after', idx)} style={ui.delBtn}>×</button></div>))}</div>
-              </div>
+              <label style={ui.upBtn}>📸 Before ({row.before.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'before', e.target.files)} /></label>
+              <label style={ui.upBtn}>📸 After ({row.after.length}) <input type="file" multiple hidden onChange={e => uploadPhoto(row.id, 'after', e.target.files)} /></label>
+            </div>
+            <div style={ui.thumbnailRow}>
+              {row.before.map((img, idx) => (<div key={idx} style={ui.thumbWrap}><img src={img.preview} style={ui.thumbImg} /><button onClick={() => deletePhoto(row.id, 'before', idx)} style={ui.delBtn}>×</button></div>))}
+              {row.after.map((img, idx) => (<div key={idx} style={ui.thumbWrap}><img src={img.preview} style={ui.thumbImg} /><button onClick={() => deletePhoto(row.id, 'after', idx)} style={ui.delBtn}>×</button></div>))}
             </div>
             <input placeholder="Remarks" style={ui.field} value={row.remarks} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, remarks: e.target.value}:r))} />
           </div>
         ))}
       </div>
-
-      {/* ✅ Footer — GET EXCEL button added */}
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>GET PDF</button>
-        <button onClick={generateExcel} style={ui.btnExcel}>GET EXCEL</button>
-        <button onClick={clearAll} style={ui.btnRed}>CLEAR ALL</button>
+        <button onClick={generatePDF} style={ui.btnBlue}>PDF</button>
+        <button onClick={generateExcel} style={ui.btnExcel}>EXCEL</button>
+        <button onClick={clearAll} style={ui.btnRed}>CLEAR</button>
       </div>
     </div>
   );
@@ -286,21 +256,19 @@ const ui = {
   card: { background: '#fff', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid #e0e6ed' },
   topRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' },
   snoBadge: { fontSize: '14px', fontWeight: 'bold', color: '#333' },
-  rowDelBtn: { background: '#fff', border: '1px solid #dc3545', color: '#dc3545', borderRadius: '4px', padding: '2px 8px', fontSize: '11px' },
   badge: { border: 'none', borderRadius: '4px', color: '#fff', padding: '5px', width: '80px', textAlign: 'center', fontSize: '12px' },
   inputGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' },
   field: { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ced4da', boxSizing: 'border-box' },
-  area: { width: '100%', height: '65px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box', marginBottom: '10px' },
+  area: { width: '100%', height: '60px', borderRadius: '6px', border: '1px solid #ced4da', padding: '10px', boxSizing: 'border-box', marginBottom: '10px' },
   photoGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' },
-  upBtn: { background: '#f8f9fa', padding: '10px', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '11px', cursor: 'pointer', display: 'block' },
-  uploadSection: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  thumbnailRow: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' },
-  thumbWrap: { position: 'relative', width: '40px', height: '40px' },
+  upBtn: { background: '#f8f9fa', padding: '8px', textAlign: 'center', borderRadius: '6px', border: '1px dashed #adb5bd', fontSize: '11px', cursor: 'pointer' },
+  thumbnailRow: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' },
+  thumbWrap: { position: 'relative', width: '45px', height: '45px' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
   delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px' },
-  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '10px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box', zIndex: 10 },
-  btnGreen: { flex: 1, padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnBlue: { flex: 1, padding: '15px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnExcel: { flex: 1, padding: '15px', background: '#217346', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }, // ✅ NEW
-  btnRed: { padding: '15px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
+  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '12px', display: 'flex', gap: '8px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box' },
+  btnGreen: { flex: 1, padding: '12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
+  btnBlue: { flex: 1, padding: '12px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
+  btnExcel: { flex: 1, padding: '12px', background: '#217346', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
+  btnRed: { flex: 0.8, padding: '12px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
 };
