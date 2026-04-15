@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx'; // New library for Excel
 
 const CLIENT_ID = "683400126186-f3a9u3fbe6l50bv1vidci7oinq7socn6.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets";
@@ -8,8 +9,6 @@ const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapi
 export default function FinalTenColumnRegister() {
   const [project, setProject] = useState("FLORA VILLA-75E");
   const [isUploading, setIsUploading] = useState(false);
-  
-  // Persistence for Login (Reload pannaalum disconnect aagaadhu)
   const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('drive_token'));
   
   const [rows, setRows] = useState(() => {
@@ -27,10 +26,7 @@ export default function FinalTenColumnRegister() {
     script.async = true; script.defer = true;
     document.body.appendChild(script);
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
-    
-    // Refresh pannaalum disconnect aagama irukka token-ah save pannuvom
     if (accessToken) sessionStorage.setItem('drive_token', accessToken);
-    
     return () => { if(document.body.contains(script)) document.body.removeChild(script); };
   }, [rows, accessToken]);
 
@@ -56,6 +52,42 @@ export default function FinalTenColumnRegister() {
 
   const formatDate = (d) => d ? d.split("-").reverse().join("-") : "";
 
+  // --- NEW EXCEL EXPORT FUNCTION ---
+  const exportToExcel = () => {
+    if (rows.length === 0) return alert("No data to export!");
+
+    // Mapping rows to Excel Format
+    const worksheetData = rows.map((r, index) => ({
+      "Slno": index + 1,
+      "Date Logged": formatDate(r.date),
+      "Description": r.desc,
+      "Logged By": r.loggedBy,
+      "Status": r.status.toUpperCase(),
+      "Actual Closed Date": formatDate(r.closedDate),
+      "Owner": r.owner,
+      "Closed By": r.closedBy,
+      "Remarks": r.remarks.toUpperCase(),
+      "Photo Links (Before)": r.before.map(img => img.drive).join(", "),
+      "Photo Links (After)": r.after.map(img => img.drive).join(", ")
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Action Register");
+
+    // Setting column widths for better readability
+    const wscols = [
+      { wch: 6 }, { wch: 15 }, { wch: 40 }, { wch: 15 }, 
+      { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, 
+      { wch: 30 }, { wch: 50 }, { wch: 50 }
+    ];
+    worksheet['!cols'] = wscols;
+
+    // Download file
+    XLSX.writeFile(workbook, `${project}_Register.xlsx`);
+  };
+
+  // --- REST OF YOUR FUNCTIONS (PDF, Upload, etc.) ---
   const uploadPhoto = async (id, type, files) => {
     if (!accessToken) return alert("Connect Drive First!");
     setIsUploading(true);
@@ -100,35 +132,21 @@ export default function FinalTenColumnRegister() {
     if (rows.length === 0) return;
     const batchSize = 5; 
     const totalBatches = Math.ceil(rows.length / batchSize);
-    
-    alert(`Total ${totalBatches} PDF files download aagum. Oru nimisham wait pannunga!`);
+    alert(`Total ${totalBatches} PDF files download aagum...`);
 
     for (let i = 0; i < totalBatches; i++) {
       const start = i * batchSize;
       const batchRows = rows.slice(start, start + batchSize);
       const doc = new jsPDF('l', 'mm', 'a4');
-      
       autoTable(doc, {
         body: [[project.toUpperCase(), 'ACTION REGISTER - NEW']],
         theme: 'grid',
         styles: { fontSize: 10, fontStyle: 'bold', halign: 'left', fillColor: [211, 211, 211] }
       });
-
       const maxBefore = Math.max(...batchRows.map(r => r.before.length), 1);
       const maxAfter = Math.max(...batchRows.map(r => r.after.length), 1);
-      
-      const head = [[
-        'Slno', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', 
-        ...Array.from({ length: maxBefore }, (_, idx) => `P${idx+1}(B)`), 
-        ...Array.from({ length: maxAfter }, (_, idx) => `P${idx+1}(A)`), 
-        'Owner', 'Closed By', 'Remarks'
-      ]];
-
-      const body = batchRows.map((r, idx) => [
-        start + idx + 1, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate),
-        ...Array(maxBefore + maxAfter).fill(''), 
-        r.owner, r.closedBy, r.remarks.toUpperCase()
-      ]);
+      const head = [['Slno', 'Date Logged', 'Description', 'Logged by', 'Current Status', 'Actual Closed Date', ...Array.from({ length: maxBefore }, (_, idx) => `P${idx+1}(B)`), ...Array.from({ length: maxAfter }, (_, idx) => `P${idx+1}(A)`), 'Owner', 'Closed By', 'Remarks']];
+      const body = batchRows.map((r, idx) => [start + idx + 1, formatDate(r.date), r.desc, r.loggedBy, r.status.toUpperCase(), formatDate(r.closedDate), ...Array(maxBefore + maxAfter).fill(''), r.owner, r.closedBy, r.remarks.toUpperCase()]);
 
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY, head: head, body: body, theme: 'grid',
@@ -137,9 +155,7 @@ export default function FinalTenColumnRegister() {
         didDrawCell: (data) => {
           if (data.section === 'head') return;
           const rowData = batchRows[data.row.index];
-          if (data.column.index === 4) {
-            data.cell.styles.fillColor = rowData.status.toUpperCase() === 'OPEN' ? [255, 0, 0] : [146, 208, 80];
-          }
+          if (data.column.index === 4) data.cell.styles.fillColor = rowData.status.toUpperCase() === 'OPEN' ? [255, 0, 0] : [146, 208, 80];
           const drawImg = (imgObj, cell) => {
             if (imgObj && imgObj.preview) {
               try { doc.addImage(imgObj.preview, 'JPEG', cell.x + 0.5, cell.y + 0.5, cell.width - 1, cell.height - 1, undefined, 'FAST'); }
@@ -147,15 +163,10 @@ export default function FinalTenColumnRegister() {
             }
           };
           const photoStart = 6;
-          if (data.column.index >= photoStart && data.column.index < photoStart + maxBefore) {
-            drawImg(rowData.before[data.column.index - photoStart], data.cell);
-          }
-          if (data.column.index >= photoStart + maxBefore && data.column.index < photoStart + maxBefore + maxAfter) {
-            drawImg(rowData.after[data.column.index - (photoStart + maxBefore)], data.cell);
-          }
+          if (data.column.index >= photoStart && data.column.index < photoStart + maxBefore) drawImg(rowData.before[data.column.index - photoStart], data.cell);
+          if (data.column.index >= photoStart + maxBefore && data.column.index < photoStart + maxBefore + maxAfter) drawImg(rowData.after[data.column.index - (photoStart + maxBefore)], data.cell);
         }
       });
-
       doc.save(`${project}_Part_${i+1}.pdf`);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -185,6 +196,7 @@ export default function FinalTenColumnRegister() {
               </div>
               <input style={{...ui.badge, backgroundColor: row.status.toUpperCase()==='OPEN'?'#ff0000':'#92d050'}} value={row.status} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, status: e.target.value}:r))} />
             </div>
+            {/* Input fields same as before... */}
             <div style={ui.inputGrid}>
               <input type="date" style={ui.field} value={row.date} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, date: e.target.value}:r))} />
               <input placeholder="Logged By" style={ui.field} value={row.loggedBy} onChange={e => setRows(rows.map(r => r.id===row.id?{...r, loggedBy: e.target.value}:r))} />
@@ -211,14 +223,16 @@ export default function FinalTenColumnRegister() {
       </div>
       <div style={ui.footer}>
         <button onClick={addRow} style={ui.btnGreen}>+ ROW</button>
-        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>GET PDF</button>
-        <button onClick={clearAll} style={ui.btnRed}>CLEAR ALL</button>
+        <button onClick={generatePDF} disabled={isUploading} style={ui.btnBlue}>PDF</button>
+        <button onClick={exportToExcel} style={ui.btnOrange}>EXCEL</button> {/* NEW BUTTON */}
+        <button onClick={clearAll} style={ui.btnRed}>CLEAR</button>
       </div>
     </div>
   );
 }
 
 const ui = {
+  // ... same as before ...
   container: { background: '#f4f7fa', minHeight: '100vh', paddingBottom: '110px', fontFamily: 'Arial' },
   nav: { background: '#1a1c1e', padding: '15px', position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' },
   authBtn: { background: '#4285F4', color: '#fff', border: 'none', padding: '12px', borderRadius: '4px', fontWeight: 'bold' },
@@ -240,8 +254,9 @@ const ui = {
   thumbWrap: { position: 'relative', width: '40px', height: '40px' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' },
   delBtn: { position: 'absolute', top: '-5px', right: '-5px', background: '#ff3b30', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px' },
-  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '15px', display: 'flex', gap: '10px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box', zIndex: 10 },
-  btnGreen: { flex: 1, padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnBlue: { flex: 1, padding: '15px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' },
-  btnRed: { padding: '15px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }
+  footer: { position: 'fixed', bottom: 0, width: '100%', background: '#fff', padding: '10px', display: 'flex', gap: '8px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box', zIndex: 10 },
+  btnGreen: { flex: 1.2, padding: '12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' },
+  btnBlue: { flex: 1, padding: '12px', background: '#007bff', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' },
+  btnOrange: { flex: 1, padding: '12px', background: '#fd7e14', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }, // NEW COLOR
+  btnRed: { flex: 1, padding: '12px', background: '#dc3545', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }
 };
