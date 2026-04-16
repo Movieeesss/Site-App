@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import ExcelJS from 'exceljs'; // ✅ Use ExcelJS for image support
+import ExcelJS from 'exceljs';
 
 const CLIENT_ID = "683400126186-f3a9u3fbe6l50bv1vidci7oinq7socn6.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets";
@@ -25,10 +25,8 @@ export default function FinalTenColumnRegister() {
     gsiScript.src = "https://accounts.google.com/gsi/client";
     gsiScript.async = true; gsiScript.defer = true;
     document.body.appendChild(gsiScript);
-
     localStorage.setItem('site_v20_final', JSON.stringify(rows));
     if (accessToken) sessionStorage.setItem('drive_token', accessToken);
-
     return () => { if (document.body.contains(gsiScript)) document.body.removeChild(gsiScript); };
   }, [rows, accessToken]);
 
@@ -66,7 +64,6 @@ export default function FinalTenColumnRegister() {
           canvas.width = maxWidth; canvas.height = img.height * scale;
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           const compressed = canvas.toDataURL('image/jpeg', 0.7);
-
           const metadata = { name: `${project}_${type}_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
           const form = new FormData();
           form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
@@ -89,39 +86,56 @@ export default function FinalTenColumnRegister() {
     setRows(prev => prev.map(r => r.id === rowId ? { ...r, [type]: r[type].filter((_, i) => i !== idx) } : r));
   };
 
-  // ✅ REWRITTEN: Excel Export with Images using ExcelJS
+  // ✅ UPDATED: Excel Export with Perfect Image Fitting & PDF Replica Logic
   const generateExcel = async () => {
     if (rows.length === 0) return alert("Data illai!");
     
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Action Register');
 
-    // 1. Define Columns
-    worksheet.columns = [
+    // PDF replica logic: find max photos to create dynamic columns
+    const maxBefore = Math.max(...rows.map(r => r.before.length), 1);
+    const maxAfter = Math.max(...rows.map(r => r.after.length), 1);
+
+    // 1. Setup Columns
+    let columns = [
       { header: 'Slno', key: 'slno', width: 8 },
       { header: 'Date Logged', key: 'date', width: 15 },
       { header: 'Description', key: 'desc', width: 40 },
       { header: 'Logged By', key: 'loggedBy', width: 15 },
       { header: 'Status', key: 'status', width: 15 },
       { header: 'Actual Closed Date', key: 'closedDate', width: 18 },
-      { header: 'Photo (Before)', key: 'photoB', width: 25 },
-      { header: 'Photo (After)', key: 'photoA', width: 25 },
+    ];
+
+    // Add dynamic Photo Before columns
+    for (let i = 0; i < maxBefore; i++) {
+      columns.push({ header: `P${i + 1}(B)`, key: `pB${i}`, width: 25 });
+    }
+    // Add dynamic Photo After columns
+    for (let i = 0; i < maxAfter; i++) {
+      columns.push({ header: `P${i + 1}(A)`, key: `pA${i}`, width: 25 });
+    }
+
+    columns.push(
       { header: 'Owner', key: 'owner', width: 15 },
       { header: 'Closed By', key: 'closedBy', width: 15 },
       { header: 'Remarks', key: 'remarks', width: 30 }
-    ];
+    );
 
-    // 2. Style the Header
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
-    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '282C34' } };
-    worksheet.getRow(1).alignment = { horizontal: 'center' };
+    worksheet.columns = columns;
 
-    // 3. Add Rows and Images
+    // 2. Style Header
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '282C34' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // 3. Add Rows
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const rowIndex = i + 2; // +1 for header, +1 for 1-based index
+      const rowIndex = i + 2;
 
-      const row = worksheet.addRow({
+      const rowData = {
         slno: i + 1,
         date: formatDate(r.date),
         desc: r.desc,
@@ -131,13 +145,13 @@ export default function FinalTenColumnRegister() {
         owner: r.owner,
         closedBy: r.closedBy,
         remarks: r.remarks.toUpperCase()
-      });
+      };
 
-      // Set row height for pictures
-      row.height = 90;
+      const row = worksheet.addRow(rowData);
+      row.height = 100; // Increased height for better image fit
       row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-      // Status Cell Coloring
+      // Status Styling
       const statusCell = worksheet.getCell(`E${rowIndex}`);
       statusCell.fill = {
         type: 'pattern', pattern: 'solid',
@@ -145,36 +159,51 @@ export default function FinalTenColumnRegister() {
       };
       statusCell.font = { color: { argb: 'FFFFFF' }, bold: true };
 
-      // Insert "Before" Photo
-      if (r.before.length > 0) {
+      // Photo Insertion Logic (Matching PDF Replica)
+      const beforeStartCol = 7; // Column G
+      const afterStartCol = beforeStartCol + maxBefore;
+
+      // Insert Before Photos
+      for (let j = 0; j < r.before.length; j++) {
         try {
           const imageId = workbook.addImage({
-            base64: r.before[0].preview,
+            base64: r.before[j].preview,
             extension: 'jpeg',
           });
           worksheet.addImage(imageId, {
-            tl: { col: 6, row: i + 1 },
-            ext: { width: 110, height: 110 }
+            tl: { col: beforeStartCol + j - 1, row: rowIndex - 1 },
+            br: { col: beforeStartCol + j, row: rowIndex },
+            editAs: 'oneCell' // This forces image to stay within cell boundaries
           });
-        } catch (e) { console.error("Before Image Error", e); }
+        } catch (e) { console.error(e); }
       }
 
-      // Insert "After" Photo
-      if (r.after.length > 0) {
+      // Insert After Photos
+      for (let k = 0; k < r.after.length; k++) {
         try {
           const imageId = workbook.addImage({
-            base64: r.after[0].preview,
+            base64: r.after[k].preview,
             extension: 'jpeg',
           });
           worksheet.addImage(imageId, {
-            tl: { col: 7, row: i + 1 },
-            ext: { width: 110, height: 110 }
+            tl: { col: afterStartCol + k - 1, row: rowIndex - 1 },
+            br: { col: afterStartCol + k, row: rowIndex },
+            editAs: 'oneCell'
           });
-        } catch (e) { console.error("After Image Error", e); }
+        } catch (e) { console.error(e); }
       }
     }
 
-    // 4. Download the File
+    // Border for all cells
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' }, left: { style: 'thin' },
+          bottom: { style: 'thin' }, right: { style: 'thin' }
+        };
+      });
+    });
+
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const link = document.createElement('a');
@@ -183,7 +212,6 @@ export default function FinalTenColumnRegister() {
     link.click();
   };
 
-  // Keep your existing generatePDF, addRow, etc.
   const generatePDF = async () => {
     if (rows.length === 0) return;
     const batchSize = 5; 
